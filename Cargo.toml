@@ -1,7 +1,8 @@
 [package]
-name = "RsClass"
+name = "rs_class"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,4 +11,6 @@ windows = "0.54.0"
 
 relm4 = "0.8"
 relm4-components = "0.8"
-relm4-icons = "0.8"
+# relm4-icons = "0.8"
+byteorder = "1.5.0"
+paste = "1.0.14"
