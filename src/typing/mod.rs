@@ -1,6 +1,6 @@
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Endianness {
     Big,
     Little,
@@ -16,6 +16,32 @@ impl Endianness {
     }
 }
 
+static BUILTINS_DT: Vec<DataTypeEnum> = vec![
+    DataTypeEnum::Simple(Box::new(BooleanDataType {
+        name: String::from("bool8"),
+        size: 1,
+    })),
+    DataTypeEnum::Simple(Box::new(BooleanDataType {
+        name: String::from("bool16"),
+        size: 2,
+    })),
+    DataTypeEnum::Simple(Box::new(BooleanDataType {
+        name: String::from("bool32"),
+        size: 4,
+    })),
+    DataTypeEnum::Simple(Box::new(IntegerDataType {
+        name: String::from("char"),
+        size: 1,
+        endianness: Endianness::Little,
+        hex: false,
+        signed: true,
+    })),
+    DataTypeEnum::Simple(Box::new(BooleanDataType {
+        name: String::from("word"),
+        size: 2,
+    })),
+];
+
 pub trait DataType {
     fn get_size(&self) -> usize;
     fn get_name(&self) -> String;
@@ -30,7 +56,7 @@ pub trait DataType {
 }
 
 pub enum DataTypeEnum {
-    Simple(Box<dyn SimpleDataType>),
+    Simple(dyn SimpleDataType),
     Composite(Box<dyn CompositeDataType>),
     Pointer(Box<DataTypeEnum>),
 }
@@ -70,13 +96,13 @@ pub trait CompositeDataType: DataType {
     fn get_children(&self) -> Vec<DataTypeEnum>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct BooleanDataType {
     size: usize,
     name: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct IntegerDataType {
     size: usize,
     signed: bool,
@@ -128,9 +154,15 @@ impl DataType for IntegerDataType {
         }?;
 
         let s = match (self.hex, self.signed) {
-            (true, true) => format!("{:x}", val as i64),
-            (true, false) => format!("{:x}", val),
-            (false, true) => format!("{}", val as i64),
+            (true, _) => format!("{:#X}", val),
+            (false, true) => {
+                let p = 8 * self.get_size();
+                let mut signed_val = val;
+                if (val >> (p - 1)) == 1 {
+                    signed_val = (u64::MAX ^ ((1 << p) - 1)) | signed_val;
+                }
+                format!("{}", signed_val as i64)
+            }
             (false, false) => format!("{}", val),
         };
         Ok(s)
@@ -148,13 +180,13 @@ impl SimpleDataType for IntegerDataType {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
 enum FloatPrecision {
     Simple,
     Double,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct FloatDataType {
     name: String,
     endianness: Endianness,
@@ -184,14 +216,14 @@ impl DataType for FloatDataType {
                     Big => BigEndian::read_f32(data),
                     Little => LittleEndian::read_f32(data),
                 };
-                Ok(val.to_string())
+                Ok(format!("{:.3}", val))
             }
             FloatPrecision::Double => {
                 let val = match self.endianness {
                     Big => BigEndian::read_f64(data),
                     Little => LittleEndian::read_f64(data),
                 };
-                Ok(val.to_string())
+                Ok(format!("{:.3}", val))
             }
         }
     }
@@ -227,7 +259,7 @@ impl DataType for StrDataType {
 mod test {
     use crate::typing::DataType;
 
-    use super::BooleanDataType;
+    use super::{BooleanDataType, Endianness, FloatDataType, FloatPrecision, IntegerDataType};
 
     #[test]
     fn test_boolean_zero() {
@@ -254,6 +286,74 @@ mod test {
         assert_eq!(dt.get_size(), 4);
         let val = dt.from_bytes(&data).unwrap();
         assert_eq!(val, "true");
+    }
+
+    #[test]
+    fn u8() -> Result<(), ()> {
+        let dt = IntegerDataType {
+            name: String::new(),
+            size: 1,
+            signed: false,
+            hex: false,
+            endianness: Endianness::Big,
+        };
+
+        let data = [50; 1];
+
+        assert_eq!(dt.get_size(), 1);
+        assert_eq!(dt.endianness, Endianness::Big);
+        assert_eq!(dt.from_bytes(&data)?, "50");
+        Ok(())
+    }
+
+    #[test]
+    fn h32() -> Result<(), ()> {
+        let dt = IntegerDataType {
+            name: String::new(),
+            size: 4,
+            signed: true,
+            hex: true,
+            endianness: Endianness::Little,
+        };
+
+        let data = [0xEF, 0xBE, 0xAD, 0xDE];
+
+        assert_eq!(dt.get_size(), 4);
+        assert_eq!(dt.endianness, Endianness::Little);
+        assert_eq!(dt.from_bytes(&data)?, "0xDEADBEEF");
+        Ok(())
+    }
+
+    #[test]
+    fn i32_minus_one() -> Result<(), ()> {
+        let dt = IntegerDataType {
+            name: String::new(),
+            size: 4,
+            signed: true,
+            hex: false,
+            endianness: Endianness::Little,
+        };
+
+        let data = [0xFF, 0xFF, 0xFF, 0xFF];
+
+        assert_eq!(dt.get_size(), 4);
+        assert_eq!(dt.endianness, Endianness::Little);
+        assert_eq!(dt.from_bytes(&data)?, "-1");
+        Ok(())
+    }
+
+    #[test]
+    fn double() -> Result<(), ()> {
+        let dt = FloatDataType {
+            name: String::new(),
+            precision: FloatPrecision::Simple,
+            endianness: Endianness::Big,
+        };
+
+        let data = [0x3f, 0x80, 0x00, 0x00];
+        assert_eq!(dt.get_size(), 4);
+        assert_eq!(dt.from_bytes(&data)?, "1.000");
+        Ok(())
     }
 }
 
