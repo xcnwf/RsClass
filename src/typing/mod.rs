@@ -1,8 +1,10 @@
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+// ENDIANNESS
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
 pub enum Endianness {
     Big,
+    #[default]
     Little,
 }
 
@@ -16,35 +18,9 @@ impl Endianness {
     }
 }
 
-static BUILTINS_DT: Vec<DataTypeEnum> = vec![
-    DataTypeEnum::Simple(Box::new(BooleanDataType {
-        name: String::from("bool8"),
-        size: 1,
-    })),
-    DataTypeEnum::Simple(Box::new(BooleanDataType {
-        name: String::from("bool16"),
-        size: 2,
-    })),
-    DataTypeEnum::Simple(Box::new(BooleanDataType {
-        name: String::from("bool32"),
-        size: 4,
-    })),
-    DataTypeEnum::Simple(Box::new(IntegerDataType {
-        name: String::from("char"),
-        size: 1,
-        endianness: Endianness::Little,
-        hex: false,
-        signed: true,
-    })),
-    DataTypeEnum::Simple(Box::new(BooleanDataType {
-        name: String::from("word"),
-        size: 2,
-    })),
-];
-
-pub trait DataType {
+pub trait DataType: Default {
     fn get_size(&self) -> usize;
-    fn get_name(&self) -> String;
+    fn get_name(&self) -> &str;
     fn from_bytes(&self, data: &[u8]) -> Result<String, ()>;
 
     fn clone_box(&self) -> Box<dyn DataType>
@@ -56,7 +32,7 @@ pub trait DataType {
 }
 
 pub enum DataTypeEnum {
-    Simple(dyn SimpleDataType),
+    Simple(DataType),
     Composite(Box<dyn CompositeDataType>),
     Pointer(Box<DataTypeEnum>),
 }
@@ -66,57 +42,25 @@ struct Entry {
     datatype: DataTypeEnum,
 }
 
-pub trait SimpleDataType: DataType {
-    fn has_hex(&self) -> bool {
-        false
-    }
-    fn get_hex(&self) -> Option<bool> {
-        None
-    }
-    fn set_hex(&mut self, is_hex: bool) {}
-    fn toggle_hex(&mut self) {
-        self.set_hex(self.get_hex().unwrap_or(false));
-    }
-    fn has_endianness(&self) -> bool {
-        false
-    }
-    fn get_endianness(&self) -> Option<Endianness> {
-        None
-    }
-    fn set_endianness(&mut self, ed: Endianness) {}
-    fn toggle_endianness(&mut self) {
-        self.set_endianness(
-            self.get_endianness()
-                .map_or(Endianness::Little, Endianness::toggle),
-        );
-    }
-}
-
 pub trait CompositeDataType: DataType {
-    fn get_children(&self) -> Vec<DataTypeEnum>;
+    fn get_children(&self) -> Vec<Entry>;
 }
 
 #[derive(Clone, Debug)]
 struct BooleanDataType {
     size: usize,
-    name: String,
 }
-
-#[derive(Clone, Debug)]
-struct IntegerDataType {
-    size: usize,
-    signed: bool,
-    hex: bool,
-    endianness: Endianness,
-    name: String,
+impl Default for BooleanDataType {
+    fn default() -> Self {
+        BooleanDataType {size: 1 }
+    }
 }
-
 impl DataType for BooleanDataType {
     fn get_size(&self) -> usize {
         self.size
     }
-    fn get_name(&self) -> String {
-        self.name.clone()
+    fn get_name(&self) -> &str {
+        return "Boolean";
     }
     fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
         if data.len() != self.size {
@@ -130,14 +74,25 @@ impl DataType for BooleanDataType {
         Ok((b).to_string())
     }
 }
-impl SimpleDataType for BooleanDataType {}
 
+#[derive(Clone, Debug)]
+struct IntegerDataType {
+    size: usize,
+    signed: bool,
+    hex: bool,
+    endianness: Endianness,
+}
+impl Default for IntegerDataType {
+    fn default() -> Self {
+        IntegerDataType{size: 4, signed: false, hex: false, endianness: Endianness::LITTLE}
+    }
+}
 impl DataType for IntegerDataType {
     fn get_size(&self) -> usize {
         return self.size;
     }
-    fn get_name(&self) -> String {
-        self.name.clone()
+    fn get_name(&self) -> &str {
+        "Integer"
     }
 
     fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
@@ -168,31 +123,19 @@ impl DataType for IntegerDataType {
         Ok(s)
     }
 }
-impl SimpleDataType for IntegerDataType {
-    fn has_endianness(&self) -> bool {
-        true
-    }
-    fn has_hex(&self) -> bool {
-        true
-    }
-    fn set_hex(&mut self, is_hex: bool) {
-        self.hex = is_hex;
-    }
-}
 
-#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Default)]
 enum FloatPrecision {
+    #[default]
     Simple,
     Double,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct FloatDataType {
-    name: String,
     endianness: Endianness,
     precision: FloatPrecision,
 }
-
 impl DataType for FloatDataType {
     fn get_size(&self) -> usize {
         use FloatPrecision::*;
@@ -201,8 +144,8 @@ impl DataType for FloatDataType {
             Double => 8,
         }
     }
-    fn get_name(&self) -> String {
-        self.name.clone()
+    fn get_name(&self) -> &str {
+        "Float"
     }
     fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
         if data.len() != self.get_size() {
@@ -229,9 +172,7 @@ impl DataType for FloatDataType {
     }
 }
 
-impl SimpleDataType for StrDataType {}
-
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct StrDataType {
     size: usize,
 }
@@ -356,44 +297,3 @@ mod test {
         Ok(())
     }
 }
-
-// macro_rules! integer_data_type {
-//     ($name:ident, $type:ident) => {
-//         paste! {
-//             pub struct [<$name DataType>] {}
-//             impl DataType for [<$name DataType>] {
-//                 fn get_size(&self) -> usize {
-//                     core::mem::size_of::<$type>()
-//                 }
-//                 fn get_name(&self) -> String {
-//                     stringify!($name).to_string()
-//                 }
-//                 fn from_bytes(&self, data: &[u8]) -> Result <String, ()> {
-//                     if data.len() != self.get_size() {return Err(())};
-//                     let val = LittleEndian::read_int(data, self.get_size()) as $type;
-//
-//                     Ok(val.to_string())
-//                 }
-//             }
-//         }
-//     };
-// }
-//
-// integer_data_type![Char, i8];
-// integer_data_type!(Byte, u8);
-// integer_data_type!(Int16, i16);
-// integer_data_type!(WORD, u16);
-// integer_data_type!(DWORD, u32);
-// integer_data_type!(Int32, i32);
-// integer_data_type!(Int64, i64);
-// integer_data_type!(QWORD, u64);
-//
-// integer_data_type!(Float, f32);
-// integer_data_type!(Double, f64);
-//#[derive(Debug)]
-//pub enum Endian {
-//    Little,
-//    Big,
-//}
-
-struct DataTypeSettings {}
