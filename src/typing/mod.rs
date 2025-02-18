@@ -1,5 +1,7 @@
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
+static mut ARCH_SIZE: usize = 32; //bit size
+
 // ENDIANNESS
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
 pub enum Endianness {
@@ -18,9 +20,9 @@ impl Endianness {
     }
 }
 
-pub trait DataType: Default {
+pub trait DataType {
     fn get_size(&self) -> usize;
-    fn get_name(&self) -> &str;
+    fn get_name(&self) -> String;
     fn from_bytes(&self, data: &[u8]) -> Result<String, ()>;
 
     fn clone_box(&self) -> Box<dyn DataType>
@@ -32,22 +34,47 @@ pub trait DataType: Default {
 }
 
 pub enum DataTypeEnum {
-    Simple(DataType),
-    Composite(Box<dyn CompositeDataType>),
+    Simple(Box<dyn DataType>),
+    Struct(StructDataType),
     Pointer(Box<DataTypeEnum>),
+    Array(Box<DataTypeEnum>, usize),
+    //FUNCTIONS 
+    //CLASS (with VTABLES)
+}
+impl DataType for DataTypeEnum {
+    fn get_size(&self) -> usize {
+        use DataTypeEnum::*;
+        match self {
+            Simple(s) => s.get_size(),
+            Struct(s) => s.get_size(),
+            Pointer(p) => p.get_size(),
+            Array(a, size) => a.get_size() * size , 
+        }
+    }
+    fn get_name(&self) -> String {
+        use DataTypeEnum::*;
+        match self {
+            Simple(s) => s.get_name(),
+            Struct(s) => s.get_name(),
+            Pointer(p) => p.get_name(),
+            Array(a, _) => a.get_name(),   
+        }
+    }
+    fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
+        use DataTypeEnum::*;
+        match self {
+            Simple(s) => s.from_bytes(data),
+            Struct(s) => s.from_bytes(data),
+            Pointer(p) => p.from_bytes(data),
+            Array(a, _) => a.from_bytes(data),
+        }
+    }
 }
 
-struct Entry {
-    name: String,
-    datatype: DataTypeEnum,
-}
 
-pub trait CompositeDataType: DataType {
-    fn get_children(&self) -> Vec<Entry>;
-}
-
+/* BOOLEANS */
 #[derive(Clone, Debug)]
-struct BooleanDataType {
+pub struct BooleanDataType {
     size: usize,
 }
 impl Default for BooleanDataType {
@@ -59,8 +86,8 @@ impl DataType for BooleanDataType {
     fn get_size(&self) -> usize {
         self.size
     }
-    fn get_name(&self) -> &str {
-        return "Boolean";
+    fn get_name(&self) -> String {
+        return "Boolean".into();
     }
     fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
         if data.len() != self.size {
@@ -75,24 +102,57 @@ impl DataType for BooleanDataType {
     }
 }
 
+/* INTEGERS */
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
+pub enum IntSize {
+    Integer8,
+    Integer16,
+    #[default]
+    Integer32,
+    Integer64,
+}
+impl Into<usize> for IntSize {
+    fn into(self) -> usize {
+        use IntSize::*;
+        match self {
+            Integer8 => 1,
+            Integer16 => 2,
+            Integer32 => 4,
+            Integer64 => 8,
+        }
+    }
+}
+impl TryFrom<usize> for IntSize {
+    type Error = &'static str;
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        use IntSize::*;
+        match value {
+            1 => Ok(Integer8),
+            2 => Ok(Integer16),
+            4 => Ok(Integer32),
+            8 => Ok(Integer64),
+            _ => Err("That size is not valid, can only be powers of 2 between 1 and 8.")
+        }
+    }
+}
 #[derive(Clone, Debug)]
-struct IntegerDataType {
-    size: usize,
+pub struct IntegerDataType {
+    size: IntSize,
     signed: bool,
     hex: bool,
     endianness: Endianness,
 }
 impl Default for IntegerDataType {
     fn default() -> Self {
-        IntegerDataType{size: 4, signed: false, hex: false, endianness: Endianness::LITTLE}
+        IntegerDataType{size: IntSize::Integer32, signed: false, hex: false, endianness: Endianness::Little}
     }
 }
 impl DataType for IntegerDataType {
     fn get_size(&self) -> usize {
-        return self.size;
+        return self.size.into();
     }
-    fn get_name(&self) -> &str {
-        "Integer"
+    fn get_name(&self) -> String {
+        "Integer".into()
     }
 
     fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
@@ -124,15 +184,16 @@ impl DataType for IntegerDataType {
     }
 }
 
+/* FLOATS */
 #[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Default)]
-enum FloatPrecision {
+pub enum FloatPrecision {
     #[default]
     Simple,
     Double,
 }
 
 #[derive(Clone, Debug, Default)]
-struct FloatDataType {
+pub struct FloatDataType {
     endianness: Endianness,
     precision: FloatPrecision,
 }
@@ -144,8 +205,8 @@ impl DataType for FloatDataType {
             Double => 8,
         }
     }
-    fn get_name(&self) -> &str {
-        "Float"
+    fn get_name(&self) -> String {
+        "Float".into()
     }
     fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
         if data.len() != self.get_size() {
@@ -172,8 +233,10 @@ impl DataType for FloatDataType {
     }
 }
 
+
+/* STRINGS */
 #[derive(Clone, Default)]
-struct StrDataType {
+pub struct StrDataType {
     size: usize,
 }
 
@@ -196,6 +259,79 @@ impl DataType for StrDataType {
     }
 }
 
+/* STRUCTS */
+pub struct StructDataType {
+    name: String,
+    entries: Vec<StructEntry>,
+}
+impl Default for StructDataType {
+    fn default() -> Self {
+        Self {name: "STRUCT".into(), entries: Vec::new()}
+    }
+}
+impl DataType for StructDataType {
+    fn get_size(&self) -> usize {
+        self.entries.iter().map(|e| e.size).sum()
+    }
+    fn get_name(&self) -> String {
+        return self.name.clone();
+    }
+    fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
+        if data.len() != self.get_size() {
+            return Err(());
+        }
+
+        let mut reprs = Vec::new();
+        for e in &self.entries {
+            reprs.push(format!("{}: {}",e.name, e.datatype.from_bytes(&data[e.offset..e.offset+e.size])?));
+        }
+
+        let s = format!("{} {{ {} }}", self.get_name(), reprs.join(", "));
+
+        Ok(s)
+    }
+}
+impl StructDataType {
+    pub fn new(name: String , entries : Vec<StructEntry>) -> Self {
+        StructDataType {name , entries}   
+    }
+
+    pub fn get_entries(&self) -> &Vec<StructEntry> {
+        &self.entries
+    }
+    pub fn push_entry(&mut self, mut e: StructEntry) {
+        e.offset = self.entries.last().map(|e| e.offset + e.datatype.get_size()).unwrap_or(0 );
+        self.entries.push(e);
+    }
+    pub fn insert_entry(&mut self , e : StructEntry) {   
+        todo!("Insert entry")
+    }
+}
+
+
+pub struct StructEntry {
+    name: String,
+    size: usize,
+    offset: usize,
+    datatype: DataTypeEnum,
+}
+impl StructEntry {
+    pub fn new(name: String, datatype: DataTypeEnum) -> Self {
+        Self{name, size: datatype.get_size(), offset: 0usize, datatype}
+    }
+    pub fn set_name(&mut self , name: String) { self.name = name; }
+    pub fn get_name(&self) -> &String { &self.name }
+    pub fn get_datatype(&self) -> &DataTypeEnum { &self.datatype }
+    pub fn set_dataype(&mut self , datatype: DataTypeEnum) { 
+        self.size = datatype.get_size();
+        self.datatype = datatype;
+    }
+    pub fn get_size (&self) -> usize { self.size }   
+}
+
+
+/* TESTS */
+
 #[cfg(test)]
 mod test {
     use crate::typing::DataType;
@@ -206,7 +342,6 @@ mod test {
     fn test_boolean_zero() {
         let dt = BooleanDataType {
             size: 4,
-            name: String::new(),
         };
         let data = [0; 4];
 
@@ -219,7 +354,6 @@ mod test {
     fn test_boolean_not_zero() {
         let dt = BooleanDataType {
             size: 4,
-            name: String::new(),
         };
         let mut data = [0; 4];
         data[2] = 5;
@@ -232,8 +366,7 @@ mod test {
     #[test]
     fn u8() -> Result<(), ()> {
         let dt = IntegerDataType {
-            name: String::new(),
-            size: 1,
+            size: crate::IntSize::Integer8,
             signed: false,
             hex: false,
             endianness: Endianness::Big,
@@ -250,8 +383,7 @@ mod test {
     #[test]
     fn h32() -> Result<(), ()> {
         let dt = IntegerDataType {
-            name: String::new(),
-            size: 4,
+            size: crate::IntSize::Integer32,
             signed: true,
             hex: true,
             endianness: Endianness::Little,
@@ -268,8 +400,7 @@ mod test {
     #[test]
     fn i32_minus_one() -> Result<(), ()> {
         let dt = IntegerDataType {
-            name: String::new(),
-            size: 4,
+            size: crate::IntSize::Integer32,
             signed: true,
             hex: false,
             endianness: Endianness::Little,
@@ -286,7 +417,6 @@ mod test {
     #[test]
     fn double() -> Result<(), ()> {
         let dt = FloatDataType {
-            name: String::new(),
             precision: FloatPrecision::Simple,
             endianness: Endianness::Big,
         };
