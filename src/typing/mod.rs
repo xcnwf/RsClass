@@ -1,9 +1,28 @@
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
+use serde::{Serialize, Deserialize};
+use enum_dispatch::enum_dispatch;
 
-static mut ARCH_SIZE: usize = 32; //bit size
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Default, Copy, Clone)]
+enum ArchSize {
+    #[default]
+    Arch32,
+    Arch64
+}
+impl ArchSize {
+    pub fn get_size(&self) -> usize {
+        match self {
+            ArchSize::Arch32 => 4,
+            ArchSize::Arch64 => 8
+        }
+    }
+}
+
+thread_local! {
+    static ARCH_SIZE: std::cell::Cell<ArchSize> = std::cell::Cell::new(ArchSize::Arch32);
+}
 
 // ENDIANNESS
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Serialize, Deserialize)]
 pub enum Endianness {
     Big,
     #[default]
@@ -19,6 +38,7 @@ impl Endianness {
     }
 }
 
+#[enum_dispatch]
 pub trait DataType {
     fn get_size(&self) -> usize;
     fn get_name(&self) -> String;
@@ -32,47 +52,23 @@ pub trait DataType {
     }
 }
 
+#[enum_dispatch(DataType)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum DataTypeEnum {
-    Simple(Box<dyn DataType>),
-    Struct(StructDataType),
-    Pointer(Box<DataTypeEnum>),
-    Array(Box<DataTypeEnum>, usize),
+    IntegerDataType,
+    BooleanDataType,
+    FloatDataType,
+    StrDataType,
+    StructDataType,
+    PointerDataType,
+    ArrayDataType,
     //FUNCTIONS 
     //CLASS (with VTABLES)
-}
-impl DataType for DataTypeEnum {
-    fn get_size(&self) -> usize {
-        use DataTypeEnum::*;
-        match self {
-            Simple(s) => s.get_size(),
-            Struct(s) => s.get_size(),
-            Pointer(p) => p.get_size(),
-            Array(a, size) => a.get_size() * size , 
-        }
-    }
-    fn get_name(&self) -> String {
-        use DataTypeEnum::*;
-        match self {
-            Simple(s) => s.get_name(),
-            Struct(s) => s.get_name(),
-            Pointer(p) => p.get_name(),
-            Array(a, _) => a.get_name(),   
-        }
-    }
-    fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
-        use DataTypeEnum::*;
-        match self {
-            Simple(s) => s.from_bytes(data),
-            Struct(s) => s.from_bytes(data),
-            Pointer(p) => p.from_bytes(data),
-            Array(a, _) => a.from_bytes(data),
-        }
-    }
 }
 
 
 /* BOOLEANS */
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BooleanDataType {
     size: usize,
 }
@@ -102,7 +98,7 @@ impl DataType for BooleanDataType {
 }
 
 /* INTEGERS */
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Serialize, Deserialize)]
 pub enum IntSize {
     Integer8,
     Integer16,
@@ -134,7 +130,7 @@ impl TryFrom<usize> for IntSize {
         }
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IntegerDataType {
     size: IntSize,
     signed: bool,
@@ -184,14 +180,14 @@ impl DataType for IntegerDataType {
 }
 
 /* FLOATS */
-#[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Default, Serialize, Deserialize)]
 pub enum FloatPrecision {
     #[default]
     Simple,
     Double,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct FloatDataType {
     endianness: Endianness,
     precision: FloatPrecision,
@@ -234,11 +230,10 @@ impl DataType for FloatDataType {
 
 
 /* STRINGS */
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct StrDataType {
     size: usize,
 }
-
 impl DataType for StrDataType {
     fn get_size(&self) -> usize {
         self.size
@@ -259,6 +254,7 @@ impl DataType for StrDataType {
 }
 
 /* STRUCTS */
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StructDataType {
     name: String,
     entries: Vec<StructEntry>,
@@ -310,7 +306,7 @@ impl StructDataType {
     }
 }
 
-
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StructEntry {
     name: String,
     size: usize,
@@ -330,6 +326,56 @@ impl StructEntry {
     }
     pub fn get_size (&self) -> usize { self.size }   
 }
+
+/* POINTER */
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PointerDataType {
+    pointed_datatype: Box<DataTypeEnum>
+}
+impl DataType for PointerDataType {
+    fn get_size(&self) -> usize {
+        ARCH_SIZE.get().get_size()
+    }
+
+    fn get_name(&self) -> String {
+        format!("Pointer to {}", self.pointed_datatype.get_name())
+    }
+
+    fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
+        if data.len() != self.get_size() {
+            return Err(());
+        }
+
+        let cstr = std::ffi::CStr::from_bytes_until_nul(data).map_err(|_| ())?;
+        cstr.to_owned().into_string().map_err(|_| ())
+    }
+}
+
+/* ARRAY */
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ArrayDataType {
+    element_datatype: Box<DataTypeEnum>,
+    size: usize,
+}
+impl DataType for ArrayDataType {
+    fn get_size(&self) -> usize {
+        self.element_datatype.get_size() * self.size
+    }
+
+    fn get_name(&self) -> String {
+        format!("Array of {}", self.element_datatype.get_name())
+    }
+
+    fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
+        if data.len() != self.get_size() {
+            return Err(());
+        }
+
+        let cstr = std::ffi::CStr::from_bytes_until_nul(data).map_err(|_| ())?;
+        cstr.to_owned().into_string().map_err(|_| ())
+    }
+}
+
 
 
 /* TESTS */

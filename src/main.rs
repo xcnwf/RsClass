@@ -1,5 +1,5 @@
 use eframe::egui;
-use sysinfo::{System, Process, Pid, ProcessesToUpdate::All, RefreshKind, ProcessRefreshKind};
+use sysinfo::{System, RefreshKind, ProcessRefreshKind};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 
@@ -11,7 +11,7 @@ use gui::{ProcessDialog, State as GuiState};
 fn main() {
     let native_options = eframe::NativeOptions::default();
     let window_name = format!("RsClass - {}", env!("CARGO_PKG_VERSION"));
-    eframe::run_native(&window_name, native_options, Box::new(|cc| Ok(Box::new(MyEguiApp::new(cc)))));
+    eframe::run_native(&window_name, native_options, Box::new(|cc| Ok(Box::new(MyEguiApp::new(cc))))).expect("eframe should run");
 }
 
 #[derive(Default)]
@@ -31,9 +31,8 @@ impl MyEguiApp {
         // for e.g. egui::PaintCallback.
         let mut s = Self::default();
         let health = IntegerDataType::default();
-        let e = StructEntry::new("Health".into(), DataTypeEnum::Simple(Box::new(health)));
+        let e = StructEntry::new("Health".into(), health.into());
         s.element.push_entry(e);
-
 
         let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()));
         println!("Got {} processes.", system.processes().len());
@@ -46,7 +45,7 @@ impl MyEguiApp {
 }
 
 impl eframe::App for MyEguiApp {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let mut dialog_option = self.process_dialog.lock().expect("Could not update process dialog");
         if let Some(pd) = dialog_option.deref_mut() {
             let apd = self.process_dialog.clone();
@@ -86,8 +85,8 @@ impl eframe::App for MyEguiApp {
                     dialog.open();
                     self.process_dialog = Arc::new(Mutex::new(Some(dialog)));
                 };
-                ui.button("load");
-                ui.button("save");
+                if ui.button("load").clicked() {};
+                if ui.button("save").clicked() {};
             });
         });
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -96,9 +95,14 @@ impl eframe::App for MyEguiApp {
             ui.label(format!("Selected process: {}", self.selected_process.as_ref().and_then(|p| self.system.process(p.pid())).and_then(|p| p.name().to_str()).unwrap_or("None")));
             let pstatus = self.process_dialog.lock().expect("Could not check status").as_ref().map(|pd| pd.state());
             ui.label(format!("Process window status: {:?}", pstatus));
+
+
             if let Some(GuiState::Selected(pid)) = pstatus {
+                self.system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
                 if let Some(p) = self.system.process(pid) {
                     
+                } else {
+                    self.selected_process = None
                 }
             }
         });
