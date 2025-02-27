@@ -8,6 +8,8 @@ use crate::typing::*;
 mod gui;
 use crate::gui::{ProcessDialog, State};
 
+mod win_ops;
+
 fn main() {
     let native_options = eframe::NativeOptions::default();
     let window_name = format!("RsClass - {}", env!("CARGO_PKG_VERSION"));

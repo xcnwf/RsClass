@@ -7,11 +7,16 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-windows = "0.54.0"
-
 egui = "0.31.0"
 eframe = "0.31.0"
 
 byteorder = "1.5.0"
 paste = "1.0.14"
 sysinfo = "0.33.1"
+[dependencies.windows-sys] 
+version = "0.59.0"
+features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_System_Diagnostics_Debug"
+]
