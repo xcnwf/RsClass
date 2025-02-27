@@ -3,12 +3,10 @@ use sysinfo::{System, Process, Pid, ProcessesToUpdate::All, RefreshKind, Process
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 
-mod typing;
-use crate::typing::*;
-mod gui;
-use crate::gui::{ProcessDialog, State};
+use rs_class::{typing::*, win_ops::*};
 
-mod win_ops;
+mod gui;
+use gui::{ProcessDialog, State as GuiState};
 
 fn main() {
     let native_options = eframe::NativeOptions::default();
@@ -18,10 +16,10 @@ fn main() {
 
 #[derive(Default)]
 struct MyEguiApp {
-    element: typing::StructDataType,
+    element: StructDataType,
     system: System,
 
-    selected_process_id: Option<Pid>,
+    selected_process: Option<WinProcess>,
     process_dialog: Arc<Mutex<Option<ProcessDialog>>>,
 }
 
@@ -59,22 +57,22 @@ impl eframe::App for MyEguiApp {
                     if let Some(pd) = apd.lock().expect("Could not display process selection window").deref_mut() {
                         pd.show(ctx);
                         match pd.state() {
-                            State::Closed | State::Selected(_) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+                            GuiState::Closed | GuiState::Selected(_) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
                             _ => {}
                         }
                         if ctx.input(|i| i.viewport().close_requested()) {
                             // If we want to close, set the status as cancelled
                             match pd.state() {
-                                State::Closed | State::Selected(_) => (),
+                                GuiState::Closed | GuiState::Selected(_) => (),
                                 _ => pd.cancel(),
                             }
                         }
                     }
                 });
             match pd.state() {
-                State::Closed => *dialog_option = None,
-                State::Selected(pid) => {
-                    self.selected_process_id = Some(pid);
+                GuiState::Closed => *dialog_option = None,
+                GuiState::Selected(pid) => {
+                    self.selected_process = Some(WinProcess::new(pid));
                     *dialog_option = None;
                 }
                 _ => {}
@@ -95,10 +93,10 @@ impl eframe::App for MyEguiApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Hello World!");
             ui.label(self.element.from_bytes(&[10,0,0,0u8]).expect("WTF"));
-            ui.label(format!("Selected process: {}", self.selected_process_id.and_then(|pid| self.system.process(pid)).and_then(|p| p.name().to_str()).unwrap_or("None")));
+            ui.label(format!("Selected process: {}", self.selected_process.as_ref().and_then(|p| self.system.process(p.pid())).and_then(|p| p.name().to_str()).unwrap_or("None")));
             let pstatus = self.process_dialog.lock().expect("Could not check status").as_ref().map(|pd| pd.state());
             ui.label(format!("Process window status: {:?}", pstatus));
-            if let Some(State::Selected(pid)) = pstatus {
+            if let Some(GuiState::Selected(pid)) = pstatus {
                 if let Some(p) = self.system.process(pid) {
                     
                 }

@@ -9,7 +9,6 @@ pub enum Endianness {
     #[default]
     Little,
 }
-
 impl Endianness {
     fn toggle(self) -> Endianness {
         use Endianness::{Big, Little};
@@ -299,11 +298,14 @@ impl StructDataType {
     pub fn get_entries(&self) -> &Vec<StructEntry> {
         &self.entries
     }
+    pub fn get_mut_entries(&mut self) -> &mut Vec<StructEntry> {
+        &mut self.entries
+    }
     pub fn push_entry(&mut self, mut e: StructEntry) {
         e.offset = self.entries.last().map(|e| e.offset + e.datatype.get_size()).unwrap_or(0 );
         self.entries.push(e);
     }
-    pub fn insert_entry(&mut self , e : StructEntry) {   
+    pub fn insert_entry(&mut self, idx: usize, mut e: StructEntry) {   
         todo!("Insert entry")
     }
 }
@@ -331,12 +333,11 @@ impl StructEntry {
 
 
 /* TESTS */
-
 #[cfg(test)]
 mod test {
     use crate::typing::DataType;
 
-    use super::{BooleanDataType, Endianness, FloatDataType, FloatPrecision, IntegerDataType};
+    use super::*;
 
     #[test]
     fn test_boolean_zero() {
@@ -366,7 +367,7 @@ mod test {
     #[test]
     fn u8() -> Result<(), ()> {
         let dt = IntegerDataType {
-            size: crate::IntSize::Integer8,
+            size: IntSize::Integer8,
             signed: false,
             hex: false,
             endianness: Endianness::Big,
@@ -383,7 +384,7 @@ mod test {
     #[test]
     fn h32() -> Result<(), ()> {
         let dt = IntegerDataType {
-            size: crate::IntSize::Integer32,
+            size: IntSize::Integer32,
             signed: true,
             hex: true,
             endianness: Endianness::Little,
@@ -400,7 +401,7 @@ mod test {
     #[test]
     fn i32_minus_one() -> Result<(), ()> {
         let dt = IntegerDataType {
-            size: crate::IntSize::Integer32,
+            size: IntSize::Integer32,
             signed: true,
             hex: false,
             endianness: Endianness::Little,
