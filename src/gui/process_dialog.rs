@@ -10,7 +10,7 @@ use sysinfo::{Pid, System, ProcessesToUpdate::All};
 pub enum State {
     Open,       // Visible
     Closed,     // Destroyed
-    Selected,   // Process is selected
+    Selected(Pid),   // Process is selected
     Cancelled   // 
 }
 
@@ -30,14 +30,24 @@ impl ProcessDialog {
     }
 
     pub fn selected(&self) -> bool {
-        self.state == State::Selected
+        match self.state {
+            State::Selected(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn cancel(&mut self) {
+        self.state = State::Cancelled;
     }
 
     pub fn state(&self) -> State {
         self.state
     }
     pub fn pid(&self) -> Option<Pid> {
-        self.selected_process_id
+        match self.state {
+            State::Selected(pid) => Some(pid.clone()),
+            _ => None
+        }
     }
 
     fn refresh(&mut self) {
@@ -71,11 +81,7 @@ impl ProcessDialog {
     }
 
     fn ui(&mut self, ctx: &egui::Context, is_open: &mut bool) {
-        let window = egui::Window::new("Process Selection")
-            .open(is_open)
-            //.default_size(self.default_size)
-            .resizable(true)
-            .collapsible(false);
+        let window = egui::CentralPanel::default();
 
         window.show(ctx, |ui| {
             ui.ctx().move_to_top(ui.layer_id());
@@ -97,7 +103,7 @@ impl ProcessDialog {
                 }
                 if label_response.double_clicked() {
                     self.selected_process_id = Some(pid.to_owned());
-                    self.state = State::Selected;
+                    self.state = State::Selected(pid.to_owned());
                 }
             }
         });
@@ -108,7 +114,9 @@ impl ProcessDialog {
         ui.horizontal(|ui| {
             let ok_button = egui::Button::new("Ok");
             if ui.add_enabled(self.selected_process_id.is_some(), ok_button).clicked() {
-                self.state = State::Selected;
+                if let Some(pid) = self.selected_process_id {
+                    self.state = State::Selected(pid.to_owned());
+                }
             }
             if ui.button("Close").clicked() {
                 self.state = State::Cancelled;

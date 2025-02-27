@@ -1,8 +1,8 @@
 use eframe::egui;
 use sysinfo::{System, Process, Pid, ProcessesToUpdate::All, RefreshKind, ProcessRefreshKind};
+use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 
-//mod gui;
 mod typing;
 use crate::typing::*;
 mod gui;
@@ -20,7 +20,7 @@ struct MyEguiApp {
     system: System,
 
     selected_process_id: Option<Pid>,
-    process_dialog: Option<ProcessDialog>,
+    process_dialog: Arc<Mutex<Option<ProcessDialog>>>,
 }
 
 impl MyEguiApp {
@@ -47,69 +47,44 @@ impl MyEguiApp {
 
 impl eframe::App for MyEguiApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        if let Some(pd) = &mut self.process_dialog {
-            // egui::Modal::new(egui::Id::from("Selection Window"))
-            //     .max_height(ctx.input(|is| is.viewport().inner_rect.map(|r| r.height()).unwrap_or(100.0)))
-            //     .show(ctx, |ui| {
-            //         ui.heading("Select an option");
-            //         egui::ScrollArea::vertical().show(ui, |ui | {
-            //             let spid = self.selected_process.unwrap_or(Pid::from_u32(0));
-            //             for (pid, process) in self.system.processes() {
-            //                 let label_response = ui.selectable_label(
-            //                     *pid == spid, 
-            //                     format!("{:6} | {}", pid, process.name().to_str().unwrap_or_default())
-            //                 );
-            //                 if label_response.clicked() {
-            //                     self.selected_process = Some(*pid)
-            //                 }
-            //                 if label_response.double_clicked() {
-            //                     self.opened_process_id = Some(pid.to_owned());
-            //                     self.selected_process = None;
-            //                     self.show_process_selection_window = false;
-            //                 }
-            //             }
-            //         });
-                    
-            //         if ui.button("Refresh").clicked() {
-            //             self.system.refresh_processes(All, true);
-            //         }
-            //         egui::Grid::new("selection_grid").show(ui, |ui| {
-            //             let ok_button = egui::Button::new("Ok");
-            //             if ui.add_enabled(self.selected_process.is_some(), ok_button).clicked() {
-            //                 self.opened_process_id = self.selected_process;
-            //                 self.selected_process = None;
-            //                 self.show_process_selection_window = false;
-            //             } 
-            //             if ui.button("Close").clicked() {
-            //                 self.selected_process = None;
-            //                 self.show_process_selection_window = false;
-            //             }
-            //         }) 
-            //     });
-
-            // ctx.show_viewport_deferred(
-            //     egui::ViewportId::from_hash_of("Process selection"),
-            //     egui::ViewportBuilder::default(), 
-            //      |ctx, _vp_class| {
-            //         apd_clone.lock().expect("Could not display process selection window").show(ctx);
-            //     });
-            pd.show(ctx);
-            // let pd = apd.lock().expect("Could not get process selection result");
+        let mut dialog_option = self.process_dialog.lock().expect("Could not update process dialog");
+        if let Some(pd) = dialog_option.deref_mut() {
+            let apd = self.process_dialog.clone();
+            ctx.show_viewport_deferred(
+                egui::ViewportId::from_hash_of("Process selection"),
+                egui::ViewportBuilder::default(), 
+                 move |ctx, _class| {
+                    if let Some(pd) = apd.lock().expect("Could not display process selection window").deref_mut() {
+                        pd.show(ctx);
+                        match pd.state() {
+                            State::Closed | State::Selected(_) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+                            _ => {}
+                        }
+                        if ctx.input(|i| i.viewport().close_requested()) {
+                            // If we want to close, set the status as cancelled
+                            match pd.state() {
+                                State::Closed | State::Selected(_) => (),
+                                _ => pd.cancel(),
+                            }
+                        }
+                    }
+                });
             match pd.state() {
-                State::Closed => self.process_dialog = None,
-                State::Selected => {
-                    self.selected_process_id = pd.pid();
-                    self.process_dialog = None
+                State::Closed => *dialog_option = None,
+                State::Selected(pid) => {
+                    self.selected_process_id = Some(pid);
+                    *dialog_option = None;
                 }
                 _ => {}
             }
         }
+        drop(dialog_option);
         egui::TopBottomPanel::top("menu").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("open process").clicked() {
                     let mut dialog = ProcessDialog::new();
                     dialog.open();
-                    self.process_dialog = Some(dialog);
+                    self.process_dialog = Arc::new(Mutex::new(Some(dialog)));
                 };
                 ui.button("load");
                 ui.button("save");
@@ -118,7 +93,14 @@ impl eframe::App for MyEguiApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Hello World!");
             ui.label(self.element.from_bytes(&[10,0,0,0u8]).expect("WTF"));
-            ui.label(format!("Selected process: {}", self.selected_process_id.and_then(|pid| self.system.process(pid)).and_then(|p| p.name().to_str()).unwrap_or("None")))
+            ui.label(format!("Selected process: {}", self.selected_process_id.and_then(|pid| self.system.process(pid)).and_then(|p| p.name().to_str()).unwrap_or("None")));
+            let pstatus = self.process_dialog.lock().expect("Could not check status").as_ref().map(|pd| pd.state());
+            ui.label(format!("Process window status: {:?}", pstatus));
+            if let Some(State::Selected(pid)) = pstatus {
+                if let Some(p) = self.system.process(pid) {
+                    
+                }
+            }
         });
     }
 }
