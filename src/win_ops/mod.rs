@@ -25,6 +25,7 @@ pub trait SystemProcess {
     fn pid(&self) -> Pid;
     fn read_memory(&mut self, from: u64, size: u64) -> Result<Vec<u8>, String>;
     fn write_memory(&mut self, from: u64, what: Vec<u8>) -> Result<(), String>;
+    fn close(&mut self);
 }
 
 #[derive(Debug)]
@@ -77,5 +78,9 @@ impl SystemProcess for WinProcess {
     }
     fn write_memory(&mut self, from: u64, what: Vec<u8>) -> Result<(), String> {
         todo!("winprocess: write_memory")
+    }
+
+    fn close(&mut self) {
+        self.state = State::Closed;
     }
 }

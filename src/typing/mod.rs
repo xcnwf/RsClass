@@ -178,6 +178,48 @@ impl DataType for IntegerDataType {
         Ok(s)
     }
 }
+impl IntegerDataType {
+    pub fn set_hex(&mut self, hex: bool) {
+        self.hex = hex;
+    }
+    pub fn toggle_hex(&mut self) {
+        self.set_hex(!self.hex);
+    }
+    pub fn with_hex(mut self, hex: bool) -> Self {
+        self.set_hex(hex);
+        self
+    }
+
+    pub fn set_signed(&mut self, signed: bool) {
+        self.signed = signed;
+    }
+    pub fn toggle_signed(&mut self) {
+        self.set_signed(!self.signed);
+    }
+    pub fn with_signed(mut self, signed: bool) -> Self {
+        self.set_signed(signed);
+        self
+    }
+
+    pub fn set_endianness(&mut self, endianness: Endianness) {
+        self.endianness = endianness;
+    }
+    pub fn toggle_endianness(&mut self) {
+        self.set_endianness(self.endianness.toggle());
+    }
+    pub fn with_endianness(mut self, endianness: Endianness) -> Self {
+        self.set_endianness(endianness);
+        self
+    }
+
+    pub fn set_size(&mut self, size: IntSize) {
+        self.size = size
+    }
+    pub fn with_size(mut self, size: IntSize) -> Self {
+        self.set_size(size);
+        self
+    }
+}
 
 /* FLOATS */
 #[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Default, Serialize, Deserialize)]
@@ -288,14 +330,10 @@ impl DataType for StructDataType {
 }
 impl StructDataType {
     pub fn new(name: String , entries : Vec<StructEntry>) -> Self {
-        StructDataType {name , entries}   
+        StructDataType {name, entries}   
     }
-
     pub fn get_entries(&self) -> &Vec<StructEntry> {
         &self.entries
-    }
-    pub fn get_mut_entries(&mut self) -> &mut Vec<StructEntry> {
-        &mut self.entries
     }
     pub fn push_entry(&mut self, mut e: StructEntry) {
         e.offset = self.entries.last().map(|e| e.offset + e.datatype.get_size()).unwrap_or(0 );
@@ -375,8 +413,6 @@ impl DataType for ArrayDataType {
         cstr.to_owned().into_string().map_err(|_| ())
     }
 }
-
-
 
 /* TESTS */
 #[cfg(test)]
