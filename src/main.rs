@@ -3,7 +3,7 @@ use sysinfo::{System, RefreshKind, ProcessRefreshKind};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 
-use rs_class::{typing::*, win_ops::*};
+use rs_class::{typing::*, ops::*};
 
 mod gui;
 use gui::{ProcessDialog, State as GuiState};
@@ -19,7 +19,7 @@ struct MyEguiApp {
     element: StructDataType,
     system: System,
 
-    selected_process: Option<WinProcess>,
+    selected_process: Option<Process>,
     process_dialog: Arc<Mutex<Option<ProcessDialog>>>,
 }
 
@@ -71,7 +71,7 @@ impl eframe::App for MyEguiApp {
             match pd.state() {
                 GuiState::Closed => *dialog_option = None,
                 GuiState::Selected(pid) => {
-                    self.selected_process = Some(WinProcess::new(pid));
+                    self.selected_process = Some(Process::new(pid));
                     *dialog_option = None;
                 }
                 _ => {}

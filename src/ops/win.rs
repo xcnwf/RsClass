@@ -1,10 +1,12 @@
-use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
-use windows_sys::Win32::Foundation::{HANDLE, GetLastError};
-use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_VM_READ, PROCESS_VM_WRITE, PROCESS_VM_OPERATION};
+#![cfg(target_os="windows")]
 
 use sysinfo::Pid;
 
 use crate::typing::DataType;
+
+use windows_sys::Win32::System::Diagnostics::Debug::{ReadProcessMemory, WriteProcessMemory};
+use windows_sys::Win32::Foundation::{HANDLE, GetLastError};
+use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_VM_READ, PROCESS_VM_WRITE, PROCESS_VM_OPERATION};
 
 #[derive(Debug, PartialEq, Default)]
 enum State {
@@ -22,13 +24,6 @@ impl State {
     }
 }
 
-pub trait SystemProcess {
-    fn open(&mut self) -> Result<(), String>;
-    fn pid(&self) -> Pid;
-    fn read_memory(&mut self, location: u64, dt: &impl DataType) -> Result<Vec<u8>, String>;
-    fn write_memory(&mut self, location: u64, what: Vec<u8>) -> Result<(), String>;
-    fn close(&mut self);
-}
 
 #[derive(Debug)]
 pub struct WinProcess {
@@ -41,7 +36,7 @@ impl WinProcess {
         Self {pid, state: State::Created}
     }
 }
-impl SystemProcess for WinProcess {
+impl super::SystemProcess for WinProcess {
     fn pid(&self) -> Pid {
         self.pid
     }
@@ -79,8 +74,21 @@ impl SystemProcess for WinProcess {
         };
         return Ok(read_buffer);
     }
+
     fn write_memory(&mut self, location: u64, what: Vec<u8>) -> Result<(), String> {
-        todo!("winprocess: write_memory")
+        let handle = self.state.handle().ok_or("Handle is closed or not yet opened.")?;
+        let size = what.len();
+        let mut bytes_written = 0usize;
+        unsafe {
+            let r = WriteProcessMemory(handle, location as *const std::ffi::c_void, what.as_ptr() as *const core::ffi::c_void, size, &raw mut bytes_written as *mut usize);
+            if r == 0 {
+                return Err(format!("Could not write memory, error: {}.",GetLastError()))
+            }
+            if bytes_written != size {
+                return Err(format!("Memory written was smaller than requested !"));
+            }
+        };
+        return Ok(());
     }
 
     fn close(&mut self) {
