@@ -96,7 +96,15 @@ impl DataType for BooleanDataType {
         Ok((b).to_string())
     }
 }
-
+impl BooleanDataType {
+    pub fn set_size(&mut self, size: usize) {
+        self.size = size;
+    }
+    pub fn with_size(mut self, size: usize) -> Self {
+        self.set_size(size);
+        self
+    }
+}
 /* INTEGERS */
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Serialize, Deserialize)]
 pub enum IntSize {
@@ -228,7 +236,15 @@ pub enum FloatPrecision {
     Simple,
     Double,
 }
-
+impl FloatPrecision {
+    pub fn toggle(&self) -> Self {
+        use FloatPrecision::*;
+        match self {
+            Simple => Double,
+            Double => Simple    
+        }
+    }
+}
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct FloatDataType {
     endianness: Endianness,
@@ -269,7 +285,29 @@ impl DataType for FloatDataType {
         }
     }
 }
+impl FloatDataType {
+    pub fn set_precision(&mut self, precision: FloatPrecision) {
+        self.precision = precision;
+    }
+    pub fn toggle_precision(&mut self) {
+        self.set_precision(self.precision.toggle());
+    }
+    pub fn with_precision(mut self, precision: FloatPrecision) -> Self {
+        self.set_precision(precision);
+        self
+    }
 
+    pub fn set_endianness(&mut self, endianness: Endianness) {
+        self.endianness = endianness;
+    }
+    pub fn toggle_endianness(&mut self) {
+        self.set_endianness(self.endianness.toggle());
+    }
+    pub fn with_endianness(mut self, endianness: Endianness) -> Self {
+        self.set_endianness(endianness);
+        self
+    }
+}
 
 /* STRINGS */
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
@@ -292,6 +330,15 @@ impl DataType for StrDataType {
 
         let cstr = std::ffi::CStr::from_bytes_until_nul(data).map_err(|_| ())?;
         cstr.to_owned().into_string().map_err(|_| ())
+    }
+}
+impl StrDataType {
+    pub fn set_size(&mut self, size: usize) {
+        self.size = size;
+    }
+    pub fn with_size(mut self, size: usize) -> Self {
+        self.set_size(size);
+        self
     }
 }
 
