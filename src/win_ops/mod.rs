@@ -4,6 +4,8 @@ use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_VM_READ, PROCES
 
 use sysinfo::Pid;
 
+use crate::typing::DataType;
+
 #[derive(Debug, PartialEq, Default)]
 enum State {
     #[default]
@@ -23,8 +25,8 @@ impl State {
 pub trait SystemProcess {
     fn open(&mut self) -> Result<(), String>;
     fn pid(&self) -> Pid;
-    fn read_memory(&mut self, from: u64, size: u64) -> Result<Vec<u8>, String>;
-    fn write_memory(&mut self, from: u64, what: Vec<u8>) -> Result<(), String>;
+    fn read_memory(&mut self, location: u64, dt: &impl DataType) -> Result<Vec<u8>, String>;
+    fn write_memory(&mut self, location: u64, what: Vec<u8>) -> Result<(), String>;
     fn close(&mut self);
 }
 
@@ -60,23 +62,24 @@ impl SystemProcess for WinProcess {
         }
     }
 
-    fn read_memory(&mut self, from: u64, size: u64) -> Result<Vec<u8>, String> {
+    fn read_memory(&mut self, location: u64, dt: &impl DataType) -> Result<Vec<u8>, String> {
         let handle = self.state.handle().ok_or("Handle is closed or not yet opened.")?;
-        let mut read_buffer: Vec<u8> = Vec::with_capacity(size as usize);
+        let size = dt.get_size();
+        let mut read_buffer: Vec<u8> = Vec::with_capacity(size);
         let mut bytes_read = 0usize;
         unsafe {
-            let r = ReadProcessMemory(handle, from as *const core::ffi::c_void, read_buffer.as_mut_ptr() as *mut core::ffi::c_void, size as usize, &mut bytes_read);
+            let r = ReadProcessMemory(handle, location as *const std::ffi::c_void, read_buffer.as_mut_ptr() as *mut core::ffi::c_void, size, &mut bytes_read);
             if r == 0 {
                 return Err(format!("Could not read memory, error: {}.",GetLastError()))
             }
-            if bytes_read as u64 != size {
+            if bytes_read != size {
                 return Err(format!("Memory read has a smaller size than requested."))
             }
             read_buffer.set_len(bytes_read);
         };
         return Ok(read_buffer);
     }
-    fn write_memory(&mut self, from: u64, what: Vec<u8>) -> Result<(), String> {
+    fn write_memory(&mut self, location: u64, what: Vec<u8>) -> Result<(), String> {
         todo!("winprocess: write_memory")
     }
 
