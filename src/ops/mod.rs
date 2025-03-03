@@ -6,6 +6,11 @@ mod win;
 #[cfg(target_os="windows")]
 pub use win::WinProcess as Process;
 
+#[cfg(target_os="linux")]
+mod linux;
+#[cfg(target_os="linux")]
+pub use linux::LinProcess as Process;
+
 pub trait SystemProcess {
     fn open(&mut self) -> Result<(), String>;
     fn pid(&self) -> Pid;
