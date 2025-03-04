@@ -1,4 +1,5 @@
 use eframe::egui;
+use egui::{Frame, Style};
 use sysinfo::{System, RefreshKind, ProcessRefreshKind};
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
@@ -20,7 +21,7 @@ struct MyEguiApp {
     system: System,
 
     selected_process: Option<Process>,
-    process_dialog: Arc<Mutex<Option<ProcessDialog>>>,
+    process_dialog: Option<ProcessDialog>,
 }
 
 impl MyEguiApp {
@@ -46,44 +47,26 @@ impl MyEguiApp {
 
 impl eframe::App for MyEguiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let mut dialog_option = self.process_dialog.lock().expect("Could not update process dialog");
-        if let Some(pd) = dialog_option.deref_mut() {
-            let apd = self.process_dialog.clone();
-            ctx.show_viewport_deferred(
-                egui::ViewportId::from_hash_of("Process selection"),
-                egui::ViewportBuilder::default(), 
-                 move |ctx, _class| {
-                    if let Some(pd) = apd.lock().expect("Could not display process selection window").deref_mut() {
-                        pd.show(ctx);
-                        match pd.state() {
-                            GuiState::Closed | GuiState::Selected(_) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
-                            _ => {}
-                        }
-                        if ctx.input(|i| i.viewport().close_requested()) {
-                            // If we want to close, set the status as cancelled
-                            match pd.state() {
-                                GuiState::Closed | GuiState::Selected(_) => (),
-                                _ => pd.cancel(),
-                            }
-                        }
-                    }
-                });
+        // Process Selection Window
+        if let Some(pd) = self.process_dialog.as_mut() {
+            pd.show(ctx);
             match pd.state() {
-                GuiState::Closed => *dialog_option = None,
+                GuiState::Closed => self.process_dialog = None,
                 GuiState::Selected(pid) => {
                     self.selected_process = Some(Process::new(pid));
-                    *dialog_option = None;
+                    self.process_dialog = None;
                 }
                 _ => {}
             }
         }
-        drop(dialog_option);
+
+        // GUI Interface
         egui::TopBottomPanel::top("menu").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("open process").clicked() {
                     let mut dialog = ProcessDialog::new();
                     dialog.open();
-                    self.process_dialog = Arc::new(Mutex::new(Some(dialog)));
+                    self.process_dialog = Some(dialog);
                 };
                 if ui.button("load").clicked() {};
                 if ui.button("save").clicked() {};
@@ -93,7 +76,7 @@ impl eframe::App for MyEguiApp {
             ui.heading("Hello World!");
             ui.label(self.element.from_bytes(&[10,0,0,0u8]).expect("WTF"));
             ui.label(format!("Selected process: {}", self.selected_process.as_ref().and_then(|p| self.system.process(p.pid())).and_then(|p| p.name().to_str()).unwrap_or("None")));
-            let pstatus = self.process_dialog.lock().expect("Could not check status").as_ref().map(|pd| pd.state());
+            let pstatus = self.process_dialog.as_ref().map(|pd| pd.state());
             ui.label(format!("Process window status: {:?}", pstatus));
 
 

@@ -4,6 +4,9 @@
  * 
 */
 
+use std::{cell::RefCell, rc::Rc};
+
+use egui::RichText;
 use sysinfo::{Pid, System, ProcessesToUpdate::All};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -63,15 +66,13 @@ impl ProcessDialog {
     pub fn show(&mut self, ctx: &egui::Context) -> &Self {
         self.state = match self.state {
             State::Open => {
-                if ctx.input(|state| state.key_pressed(egui::Key::Escape)) {
-                    self.state = State::Cancelled;
-                }
-
                 let mut is_open = true;
                 self.ui(ctx, &mut is_open);
-                match is_open {
-                    true => self.state,
-                    false => State::Cancelled,
+                
+                if is_open {
+                    self.state
+                } else {
+                    State::Cancelled
                 }
             },
             _ => State::Closed,
@@ -81,22 +82,27 @@ impl ProcessDialog {
     }
 
     fn ui(&mut self, ctx: &egui::Context, is_open: &mut bool) {
-        let window = egui::CentralPanel::default();
-
-        window.show(ctx, |ui| {
-            ui.ctx().move_to_top(ui.layer_id());
+        let window = egui::Modal::new("Process Selection Window".into());
+        if window.show(ctx, |ui| {
             self.ui_in_window(ui)
-        });
+        }).should_close(){
+            *is_open = false;
+        }
     }
 
     fn ui_in_window(&mut self, ui: &mut egui::Ui) {
         ui.heading("Select a process");
-        egui::ScrollArea::vertical().show(ui, |ui | {
+        let rect = ui.input(|is| is.viewport().inner_rect);
+
+        egui::ScrollArea::vertical()
+            .max_height(rect.map(|r| r.height()/2.0).unwrap_or(f32::MAX))
+            .show(ui, |ui | {
+            
             for (pid, process) in self.system.processes() {
                 let label_response = ui.selectable_value(
                     &mut self.selected_process_id,
                     Some(*pid), 
-                    format!("{:10} | {}", pid, process.name().to_str().unwrap_or_default())
+                    RichText::new(format!("{:>6} | {}", pid.as_u32(), process.name().to_str().unwrap_or_default())).monospace()
                 );
                 if label_response.clicked() {
                     self.selected_process_id = Some(pid.to_owned())
@@ -108,19 +114,31 @@ impl ProcessDialog {
             }
         });
         
-        if ui.button("Refresh").clicked() {
-            self.refresh();
-        }
-        ui.horizontal(|ui| {
-            let ok_button = egui::Button::new("Ok");
-            if ui.add_enabled(self.selected_process_id.is_some(), ok_button).clicked() {
-                if let Some(pid) = self.selected_process_id {
-                    self.state = State::Selected(pid.to_owned());
+        ui.add_space(10.0);
+
+        let shared_self = Rc::new(RefCell::new(self));
+        let shared_self_clone = shared_self.clone();
+
+        egui::Sides::new().show(ui, 
+            |ui| {
+                if ui.button("Refresh").clicked() {
+                    shared_self.borrow_mut().refresh();
                 }
+            },
+            |ui| {
+                ui.horizontal(|ui| {
+                    let mut x = shared_self_clone.borrow_mut();
+                    let ok_button = egui::Button::new("Ok");
+                    if ui.add_enabled(x.selected_process_id.is_some(), ok_button).clicked() {
+                        if let Some(pid) = x.selected_process_id {
+                            x.state = State::Selected(pid.to_owned());
+                        }
+                    }
+                    if ui.button("Close").clicked() {
+                        x.state = State::Cancelled;
+                    }
+                });
             }
-            if ui.button("Close").clicked() {
-                self.state = State::Cancelled;
-            }
-        });
+        );
     }
 }
