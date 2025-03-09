@@ -33,14 +33,8 @@ lazy_static::lazy_static! {
     ].into();
 }
 
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum State {
-    Open,       // Visible
-    Closed,     // Destroyed
-    Selected(Pid),   // Process is selected
-    Cancelled   // 
-}
+use super::DialogState;
+pub type State = DialogState<Pid>;
 
 pub struct ProcessDialog {
     state: State,

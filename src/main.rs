@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use rs_class::{typing::*, ops::*};
 
 mod gui;
-use gui::{ProcessDialog, State as GuiState};
+use gui::process_dialog::{ProcessDialog, State as PDState};
 
 fn main() {
     let native_options = eframe::NativeOptions::default();
@@ -56,6 +56,18 @@ impl MyEguiApp {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let mut s = Self::default();
         let health = IntegerDataType::default();
+
+        // add default datatypes
+        s.type_aliases.insert(String::from("Int"), IntegerDataType::default().into());
+        s.type_aliases.insert(String::from("UInt"), IntegerDataType::default().with_signed(false).into());
+        s.type_aliases.insert(String::from("DWORD"), IntegerDataType::default().with_hex(true).into());
+        s.type_aliases.insert(String::from("WORD"), IntegerDataType::default().with_hex(true).with_size(IntSize::Integer16).into());
+        s.type_aliases.insert(String::from("Char"), IntegerDataType::default().with_size(IntSize::Integer8).into());
+        s.type_aliases.insert(String::from("UChar"), IntegerDataType::default().with_size(IntSize::Integer8).with_signed(false).into());
+        s.type_aliases.insert(String::from("CStr"), StrDataType::default().into());
+        s.type_aliases.insert(String::from("Bool"), BooleanDataType::default().into());
+        s.type_aliases.insert(String::from("Float"), FloatDataType::default().into());
+        s.type_aliases.insert(String::from("Double"), FloatDataType::default().with_precision(FloatPrecision::Double).into());
 
         let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()));
         println!("Got {} processes.", system.processes().len());
@@ -266,8 +278,8 @@ impl eframe::App for MyEguiApp {
         if let Some(pd) = self.process_dialog.as_mut() {
             pd.show(ctx);
             match pd.state() {
-                GuiState::Closed => self.process_dialog = None,
-                GuiState::Selected(pid) => {
+                PDState::Closed => self.process_dialog = None,
+                PDState::Selected(pid) => {
                     self.selected_process = Some(Process::new(pid));
                     self.process_dialog = None;
                 }
@@ -307,7 +319,7 @@ impl eframe::App for MyEguiApp {
             ui.label(format!("Process window status: {:?}", pstatus));
 
 
-            if let Some(GuiState::Selected(pid)) = pstatus {
+            if let Some(PDState::Selected(pid)) = pstatus {
                 self.system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
                 if let Some(p) = self.system.process(pid) {
                     
