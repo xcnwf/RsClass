@@ -62,6 +62,7 @@ pub enum DataTypeEnum {
     StructDataType,
     PointerDataType,
     ArrayDataType,
+    //Enums TODO!
     //FUNCTIONS 
     //CLASS (with VTABLES)
 }
@@ -105,6 +106,7 @@ impl BooleanDataType {
         self
     }
 }
+
 /* INTEGERS */
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Serialize, Deserialize)]
 pub enum IntSize {

@@ -4,10 +4,35 @@
  * 
 */
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use egui::RichText;
 use sysinfo::{Pid, System, ProcessesToUpdate::All};
+
+/*
+ * From ReClassEx : https://github.com/ajkhoury/ReClassEx/blob/master/ReClass/DialogProcSelect.cpp
+ */
+lazy_static::lazy_static! {
+    static ref common_processes : HashSet<&'static str> = 
+    [
+        "svchost.exe", "System", "conhost.exe", "wininit.exe", "smss.exe", "winint.exe", "wlanext.exe", "Code.exe", "taskhostw.exe", "SearchIndexer.exe", "Idle", "SearchApp.exe", "dllhost.exe",
+        "spoolsv.exe", "spoolsv.exe", "notepad.exe", "explorer.exe", "itunes.exe",
+        "sqlservr.exe", "nvtray.exe","nvxdsync.exe", "lsass.exe", "jusched.exe",
+        "conhost.exe", "chrome.exe", "firefox.exe", "winamp.exe", "TrustedInstaller.exe",
+        "WinRAR.exe", "calc.exe", "taskhostex.exe", "Taskmgr.exe","dwm.exe","SpotifyWebHelper.exe",
+        "plugin-container.exe", "services.exe", "devenv.exe", "flux.exe", "skype.exe", "spotify.exe",
+        "csrss.exe", "taskeng.exe", "spotifyhelper.exe", "vcpkgsrv.exe", "msbuild.exe", "cmd.exe", "taskhost.exe",
+        "SettingSyncHost.exe", "SkyDrive.exe", "ctfmon.exe", "RuntimeBroker.exe", "BTTray.exe", "BTStackServer.exe",
+        "Bluetooth Headset Helper.exe", "winlogon.exe", "PnkBstrA.exe", "armsvc.exe", "MSIAfterburner.exe", "vmnat.exe",
+        "vmware-authd.exe", "vmnetdhcp.exe", "pia_manager.exe", "SpotifyWebHelper.exe", "Dropbox.exe", "Viber.exe", "idaq.exe",
+        "idaq64.exe", "CoreSync.exe", "SpotifyCrashService.exe", "RzSynapse.exe", "acrotray.exe",
+        "CCLibrary.exe", "pia_tray.exe", "rubyw.exe", "netsession_win.exe", "NvBackend.exe", "TeamViewer_Service.exe",
+        "DisplayFusionHookAppWIN6032.exe", "DisplayFusionHookAppWIN6064.exe", "GameScannerService.exe", "AdobeUpdateService.exe",
+        "steamwebhelper.exe", "c2c_service.exe", "Sync Server.exe", "NvNetworkService.exe", "Creative Cloud.exe", "foobar2000.exe",
+        "code.exe", "ReClass.exe", "ReClass64.exe", "Discord.exe", "node.exe", "TeamViewer.exe", "Everything.exe"
+    ].into();
+}
+
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum State {
@@ -92,13 +117,16 @@ impl ProcessDialog {
 
     fn ui_in_window(&mut self, ui: &mut egui::Ui) {
         ui.heading("Select a process");
-        let rect = ui.input(|is| is.viewport().inner_rect);
+        let viewport_rect = ui.input(|is| is.viewport().inner_rect);
 
         egui::ScrollArea::vertical()
-            .max_height(rect.map(|r| r.height()/2.0).unwrap_or(f32::MAX))
+            .max_height(viewport_rect.map(|r| r.height()/2.0).unwrap_or(f32::MAX))
             .show(ui, |ui | {
             
             for (pid, process) in self.system.processes() {
+                if common_processes.contains(&process.name().to_str().unwrap_or_default()) {
+                    continue
+                }
                 let label_response = ui.selectable_value(
                     &mut self.selected_process_id,
                     Some(*pid), 

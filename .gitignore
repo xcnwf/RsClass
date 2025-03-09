@@ -1,1 +1,8 @@
+#vscode
+.vscode
+
+# Compiled files
 /target
+
+# Temporary testing files
+tmp*
