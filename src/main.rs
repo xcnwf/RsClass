@@ -3,6 +3,7 @@ use egui::ahash::HashMap;
 use egui::{Frame, Style};
 use serde::{Deserialize, Serialize};
 use sysinfo::{System, RefreshKind, ProcessRefreshKind};
+use std::collections::HashMap;
 use std::ops::DerefMut;
 use std::path::{PathBuf, Path};
 use std::sync::{Arc, Mutex};
@@ -22,6 +23,10 @@ fn main() {
 struct MyEguiApp {
     struct_tabs: Vec<StructDataType>,
     system: System,
+
+    // loaded type system
+    type_aliases: HashMap<String, DataTypeEnum>,
+
     selected_process: Option<Process>,
     state: State,
 
