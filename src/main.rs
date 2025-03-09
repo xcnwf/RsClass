@@ -1,7 +1,10 @@
 use eframe::egui;
+use egui::ahash::HashMap;
 use egui::{Frame, Style};
+use serde::{Deserialize, Serialize};
 use sysinfo::{System, RefreshKind, ProcessRefreshKind};
 use std::ops::DerefMut;
+use std::path::{Display, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use rs_class::{typing::*, ops::*};
@@ -17,11 +20,16 @@ fn main() {
 
 #[derive(Default)]
 struct MyEguiApp {
-    element: StructDataType,
+    root_element: StructDataType,
     system: System,
-
     selected_process: Option<Process>,
+
+    // dialogs
     process_dialog: Option<ProcessDialog>,
+    
+    // file saving
+    save_file_location: Option<PathBuf>,
+    is_dirty: bool
 }
 
 impl MyEguiApp {
@@ -33,7 +41,7 @@ impl MyEguiApp {
         let mut s = Self::default();
         let health = IntegerDataType::default();
         let e = StructEntry::new("Health".into(), health.into());
-        s.element.push_entry(e);
+        s.root_element.push_entry(e);
 
         let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()));
         println!("Got {} processes.", system.processes().len());
@@ -69,12 +77,25 @@ impl eframe::App for MyEguiApp {
                     self.process_dialog = Some(dialog);
                 };
                 if ui.button("load").clicked() {};
-                if ui.button("save").clicked() {};
+                if ui.button("save").clicked() {
+                    let mut file_location = PathBuf::from(".");
+                    file_location.push("tmp_save.ron");
+                    println!("{:?}", file_location.canonicalize());
+                    if let Ok(f) = std::fs::File::create(file_location) {
+                        let r = ron::ser::to_writer_pretty(f, &self.root_element, ron::ser::PrettyConfig::default());
+                        let m = match r {
+                            Ok(_) => "File has been saved!".into(),
+                            Err(e) => format!("Could not serialize element: {}", e)
+                        };
+                        println!("{}",m);
+                    } else {
+                        println!("Could not open file");
+                    }
+                };
             });
         });
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Hello World!");
-            ui.label(self.element.from_bytes(&[10,0,0,0u8]).expect("WTF"));
             ui.label(format!("Selected process: {}", self.selected_process.as_ref().and_then(|p| self.system.process(p.pid())).and_then(|p| p.name().to_str()).unwrap_or("None")));
             let pstatus = self.process_dialog.as_ref().map(|pd| pd.state());
             ui.label(format!("Process window status: {:?}", pstatus));
