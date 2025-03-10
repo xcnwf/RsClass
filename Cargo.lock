@@ -755,6 +755,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "directories"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16f5094c54661b38d03bd7e50df373292118db60b585c08a411c6d840017fe7d"
+dependencies = [
+ "dirs-sys",
+]
+
+[[package]]
+name = "dirs-sys"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e01a3366d27ee9890022452ee61b2b63a67e6f13f58900b651ff5665f0bb1fab"
+dependencies = [
+ "libc",
+ "option-ext",
+ "redox_users",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "dispatch"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -800,6 +821,12 @@ name = "dpi"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f25c0e292a7ca6d6498557ff1df68f32c99850012b6ea401cf8daf771f22ff53"
+
+[[package]]
+name = "dunce"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
 name = "ecolor"
@@ -861,6 +888,19 @@ dependencies = [
  "log",
  "nohash-hasher",
  "profiling",
+]
+
+[[package]]
+name = "egui-file-dialog"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bee10521c25a2fd1ef0d9568ef181087c7648165d61aa7e82f879f408d4c3b4e"
+dependencies = [
+ "directories",
+ "dunce",
+ "egui",
+ "serde",
+ "sysinfo",
 ]
 
 [[package]]
@@ -2085,6 +2125,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "945462a4b81e43c4e3ba96bd7b49d834c6f61198356aa858733bc4acf3cbe62e"
 
 [[package]]
+name = "option-ext"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
+
+[[package]]
 name = "orbclient"
 version = "0.3.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2375,6 +2421,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "redox_users"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd6f9d3d47bdd2ad6945c5015a226ec6155d0bcdfd8f7cd29f86b71f8de99d2b"
+dependencies = [
+ "getrandom 0.2.15",
+ "libredox",
+ "thiserror 2.0.11",
+]
+
+[[package]]
 name = "renderdoc-sys"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2399,6 +2456,7 @@ dependencies = [
  "byteorder",
  "eframe",
  "egui",
+ "egui-file-dialog",
  "enum_dispatch",
  "lazy_static",
  "ron",
