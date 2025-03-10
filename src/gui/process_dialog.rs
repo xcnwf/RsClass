@@ -132,11 +132,7 @@ impl ProcessDialog {
                     Some(*pid), 
                     RichText::new(format!("{:>6} | {}", pid.as_u32(), process.name().to_str().unwrap_or_default())).monospace()
                 );
-                if label_response.clicked() {
-                    self.selected_process_id = Some(pid.to_owned())
-                }
                 if label_response.double_clicked() {
-                    self.selected_process_id = Some(pid.to_owned());
                     self.state = State::Selected(pid.to_owned());
                 }
             }
