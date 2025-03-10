@@ -28,7 +28,7 @@ struct MyEguiApp {
     // dialogs
     process_dialog: Option<ProcessDialog>,
     closing_dialog: bool,
-    save_file_dialog: egui_file_dialog::FileDialog,
+    save_file_dialog: Option<egui_file_dialog::FileDialog>,
     
     // file saving
     save_file_location: Option<PathBuf>,
@@ -51,6 +51,9 @@ impl MyEguiApp {
         let health = IntegerDataType::default();
         let e = StructEntry::new("Health".into(), health.into());
         s.root_element.push_entry(e);
+        
+        // Dirty by default, because it is considered as a new project.
+        s.is_dirty = true;
 
         let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()));
         println!("Got {} processes.", system.processes().len());
@@ -102,8 +105,6 @@ impl eframe::App for MyEguiApp {
             });
         }
 
-        self.save_file_dialog.update(ctx);
-
         // Handle save requests
         if self.state == State::SaveAndQuit || self.state == State::Save {
             //Are the changes saved ?
@@ -122,15 +123,33 @@ impl eframe::App for MyEguiApp {
                         }
                     }
                 } else {
-                    if self.save_file_dialog.state() == egui_file_dialog::DialogState::Closed {
-                        self.save_file_dialog
-                            .save_file();
-                    }
-
-                    self.save_file_location = self.save_file_dialog.take_picked().map(|p| p.to_path_buf());
-                    if self.save_file_dialog.state() == egui_file_dialog::DialogState::Cancelled {
-                        println!("User did not choose save file, saving is cancelled");
-                        self.state = State::Normal;
+                    if let Some(fd) = self.save_file_dialog.as_mut() {
+                        use egui_file_dialog::DialogState::*;
+                        match fd.state() {
+                            Open => {fd.update(ctx);},
+                            Closed | Cancelled => {
+                                println!("User did not choose save file, saving is cancelled");
+                                self.state = State::Normal;
+                                self.save_file_dialog = None;
+                            },
+                            Picked(_p) => {
+                                self.save_file_location = fd.take_picked().map(|p| p.to_path_buf());
+                                self.save_file_dialog = None;
+                            },
+                            PickedMultiple(_) => unreachable!()
+                        }
+                    } else {
+                        let mut fd: egui_file_dialog::FileDialog = egui_file_dialog::FileDialog::new();
+                        fd.config_mut().default_file_name = self
+                                .selected_process
+                                .as_ref()
+                                .and_then(|p| self.system.process(p.pid()))
+                                .and_then(|p| p.name().to_str())
+                                .and_then(|s| PathBuf::try_from(s).ok())
+                                .and_then(|path| path.with_extension("rsclass").to_str().map(ToOwned::to_owned))
+                                .unwrap_or("new_project.rsclass".into());
+                        fd.save_file();
+                        self.save_file_dialog = Some(fd);
                     }
                 }
             } else {
@@ -175,8 +194,13 @@ impl eframe::App for MyEguiApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Hello World!");
             ui.label(format!("App state: {:?}", self.state));
+            ui.add_space(10.0);
+            ui.heading("File saving");
             ui.label(format!("Dirty? {}", self.is_dirty));
             ui.label(format!("File location: {:?}", self.save_file_location));
+            ui.label(format!("File Dialog: {:?}", self.save_file_dialog));
+            ui.add_space(10.0);
+            ui.heading("Process Dialog");
             ui.label(format!("Selected process: {}", self.selected_process.as_ref().and_then(|p| self.system.process(p.pid())).and_then(|p| p.name().to_str()).unwrap_or("None")));
             let pstatus = self.process_dialog.as_ref().map(|pd| pd.state());
             ui.label(format!("Process window status: {:?}", pstatus));
