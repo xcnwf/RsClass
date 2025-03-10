@@ -50,7 +50,6 @@ enum State {
 impl MyEguiApp {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let mut s = Self::default();
-        let health = IntegerDataType::default();
 
         let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()));
         println!("Got {} processes.", system.processes().len());
