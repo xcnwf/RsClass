@@ -66,9 +66,8 @@ impl MyEguiApp {
 
     fn save_to_file(&self) -> Result<(), String> {
         let file = std::fs::File::create(self.save_file_location.as_ref().ok_or("please select a save location")?).map_err(|e| e.to_string())?;
-        let r = ron::ser::to_writer_pretty(file, &self.root_element, ron::ser::PrettyConfig::default())
-            .map_err(|e| e.to_string());
-        r
+        ron::ser::to_writer_pretty(file, &self.root_element, ron::ser::PrettyConfig::default())
+            .map_err(|e| e.to_string())
     }
 
     fn quit(&mut self, ctx: &egui::Context) {
@@ -156,7 +155,7 @@ impl eframe::App for MyEguiApp {
                                 .as_ref()
                                 .and_then(|p| self.system.process(p.pid()))
                                 .and_then(|p| p.name().to_str())
-                                .and_then(|s| PathBuf::try_from(s).ok())
+                                .map(|s| PathBuf::from(s))
                                 .and_then(|path| path.with_extension("rsclass").to_str().map(ToOwned::to_owned))
                                 .unwrap_or("new_project.rsclass".into());
 
