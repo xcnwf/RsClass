@@ -64,7 +64,10 @@ impl TypeSelectionDialog {
     }
 
     fn ui(&mut self, ctx: &egui::Context, is_open: &mut bool) {
-        let window = egui::Modal::new("Process Selection Window".into());
+        let viewport_rect = ctx.input(|is| is.viewport().inner_rect);
+        let area = egui::Modal::default_area(egui::Id::new("type_selection_dialog_area"))
+            .default_size(viewport_rect.map(|r|egui::vec2(r.height()*0.75, r.width()*0.75)).unwrap_or(egui::vec2(f32::MAX, f32::MAX)));
+        let window = egui::Modal::new("Process Selection Window".into()).area(area);
         if window.show(ctx, |ui| {
             self.ui_in_window(ui)
         }).should_close(){
@@ -74,12 +77,12 @@ impl TypeSelectionDialog {
 
     fn ui_in_window(&mut self, ui: &mut egui::Ui) {
         ui.heading("Select a process");
-        let viewport_rect = ui.input(|is| is.viewport().inner_rect);
+        
 
         ui.text_edit_singleline(&mut self.search_string);
 
         egui::ScrollArea::vertical()
-            .max_height(viewport_rect.map(|r| r.height()/2.0).unwrap_or(f32::MAX))
+            //.max_height(viewport_rect.map(|r| r.height()/2.0).unwrap_or(f32::MAX))
             .show(ui, |ui | {
             
             for (name,_dt) in self.typedefs.borrow().iter() {
