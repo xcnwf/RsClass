@@ -20,7 +20,7 @@ fn main() {
 
 #[derive(Default)]
 struct MyEguiApp {
-    root_element: StructDataType,
+    struct_tabs: Vec<StructDataType>,
     system: System,
     selected_process: Option<Process>,
     state: State,
@@ -51,11 +51,6 @@ impl MyEguiApp {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let mut s = Self::default();
         let health = IntegerDataType::default();
-        let e = StructEntry::new("Health".into(), health.into());
-        s.root_element.push_entry(e);
-        
-        // Dirty by default, because it is considered as a new project.
-        s.is_dirty = true;
 
         let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()));
         println!("Got {} processes.", system.processes().len());
@@ -68,13 +63,13 @@ impl MyEguiApp {
 
     fn save_to_file(&self) -> Result<(), String> {
         let file = std::fs::File::create(self.save_file_location.as_ref().ok_or("please select a save location")?).map_err(|e| e.to_string())?;
-        ron::ser::to_writer_pretty(file, &self.root_element, ron::ser::PrettyConfig::default())
+        ron::ser::to_writer_pretty(file, &self.struct_tabs, ron::ser::PrettyConfig::default())
             .map_err(|e| e.to_string())
     }
 
     fn load_from_file(&mut self) -> Result<(), String> {
         let file = std::fs::File::open(self.save_file_location.as_ref().ok_or("No file path for load available")?).map_err(|e| e.to_string())?;
-        self.root_element = ron::de::from_reader(file).map_err(|e| e.to_string())?;
+        self.struct_tabs = ron::de::from_reader(file).map_err(|e| e.to_string())?;
         Ok(())
     }
 
