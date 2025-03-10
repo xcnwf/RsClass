@@ -28,7 +28,8 @@ struct MyEguiApp {
     // dialogs
     process_dialog: Option<ProcessDialog>,
     closing_dialog: bool,
-    save_file_dialog: Option<egui_file_dialog::FileDialog>,
+    file_dialog: Option<egui_file_dialog::FileDialog>,
+    save_load_dialog: bool,
     
     // file saving
     save_file_location: Option<PathBuf>,
@@ -40,6 +41,7 @@ enum State {
     #[default]
     Normal,
     Load,
+    SaveAndLoad,
     Save,
     SaveAndQuit,
     Quit,
@@ -70,6 +72,12 @@ impl MyEguiApp {
             .map_err(|e| e.to_string())
     }
 
+    fn load_from_file(&mut self) -> Result<(), String> {
+        let file = std::fs::File::open(self.save_file_location.as_ref().ok_or("No file path for load available")?).map_err(|e| e.to_string())?;
+        self.root_element = ron::de::from_reader(file).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     fn quit(&mut self, ctx: &egui::Context) {
         self.state = State::Quit;
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -82,7 +90,7 @@ impl eframe::App for MyEguiApp {
         let close_requested = ctx.input(|i| i.viewport().close_requested());
         if close_requested {
             match self.state {
-                State::Save | State::SaveAndQuit | State::Load => {
+                State::Save | State::SaveAndQuit | State::Load | State::SaveAndLoad => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 }
                 State::Normal => if self.is_dirty {
@@ -116,7 +124,7 @@ impl eframe::App for MyEguiApp {
         }
 
         // Handle save requests
-        if self.state == State::SaveAndQuit || self.state == State::Save {
+        if self.state == State::SaveAndQuit || self.state == State::Save || self.state == State::SaveAndLoad {
             //Are the changes saved ?
             if self.is_dirty {
                 if self.save_file_location.is_some() {
@@ -125,26 +133,28 @@ impl eframe::App for MyEguiApp {
                             self.is_dirty = false;
                             if self.state == State::SaveAndQuit {
                                 self.quit(ctx);
+                            } else if self.state == State::SaveAndLoad {
+                                self.state = State::Load;
                             }
                         }
                         Err(e) => {
-                            println!("ERROR: could not save: {}",e);
+                            println!("ERROR: Could not save: {}",e);
                             self.state = State::Normal;
                         }
                     }
                 } else {
-                    if let Some(fd) = self.save_file_dialog.as_mut() {
+                    if let Some(fd) = self.file_dialog.as_mut() {
                         use egui_file_dialog::DialogState::*;
                         match fd.state() {
                             Open => {fd.update(ctx);},
                             Closed | Cancelled => {
                                 println!("User did not choose save file, saving is cancelled");
                                 self.state = State::Normal;
-                                self.save_file_dialog = None;
+                                self.file_dialog = None;
                             },
                             Picked(_p) => {
                                 self.save_file_location = fd.take_picked().map(|p| p.to_path_buf());
-                                self.save_file_dialog = None;
+                                self.file_dialog = None;
                             },
                             PickedMultiple(_) => unreachable!()
                         }
@@ -163,7 +173,7 @@ impl eframe::App for MyEguiApp {
                             fd.config_mut().initial_directory = p;
                         }
                         fd.save_file();
-                        self.save_file_dialog = Some(fd);
+                        self.file_dialog = Some(fd);
                     }
                 }
             } else {
@@ -171,6 +181,83 @@ impl eframe::App for MyEguiApp {
                     self.quit(ctx);
                 } else {
                     self.state = State::Normal;
+                }
+            }
+        }
+
+        if self.save_load_dialog {
+            egui::Modal::new("save_load_dialog".into()).show(ctx, 
+            |ui| {
+                ui.heading("Do you wish to save your changes ?");
+                ui.horizontal(|ui| {
+                    if ui.button("Discard changes").clicked() {
+                        self.save_load_dialog = false;
+                        // force discard changes
+                        self.is_dirty = false;
+                        self.state = State::Load;
+                    }
+                    if ui.button("Save changes").clicked() {
+                        self.state = State::SaveAndLoad;
+                        self.save_load_dialog = false;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        self.save_load_dialog = false;
+                        self.state = State::Normal;
+                    }
+                })
+            });
+        }
+
+        if self.state == State::Load {
+            // The user has already opened/saved a project
+            if self.is_dirty && self.save_file_location.is_some() {
+                self.state = State::SaveAndLoad;
+            } else {
+                if let Some(fd) = self.file_dialog.as_mut() {
+                    use egui_file_dialog::DialogState::*;
+                    match fd.state() {
+                        Open => {fd.update(ctx);},
+                        Closed | Cancelled => {
+                            println!("User did not choose a file, loading is cancelled.");
+                            self.state = State::Normal;
+                            self.file_dialog = None;
+                        },
+                        Picked(_p) => {
+                            self.save_file_location = fd.take_picked().map(|p| p.to_path_buf());
+                            match self.load_from_file() {
+                                Ok(()) => {
+                                    self.is_dirty = false;
+                                    self.file_dialog = None;
+                                    self.state = State::Normal;
+                                    println!("Loaded from file!")
+                                },
+                                Err(e) => {
+                                    println!("ERROR: Could not load: {}",e);
+                                }
+                            };
+                        },
+                        PickedMultiple(_) => unreachable!()
+                    }
+                } else {
+                    let mut fd: egui_file_dialog::FileDialog = egui_file_dialog::FileDialog::new()
+                        .add_file_filter("rsclass", Arc::new(|path| path.extension().map(|ext| ext == "rsclass").unwrap_or_default()))
+                        .default_file_filter("rsclass");
+                    if let Some(file_name) = self
+                        .selected_process
+                        .as_ref()
+                        .and_then(|p| self.system.process(p.pid()))
+                        .and_then(|p| p.name().to_str())
+                        .map(|s| PathBuf::from(s))
+                        .and_then(|path| path.with_extension("rsclass").to_str().map(ToOwned::to_owned))
+                    {
+                        fd.config_mut().default_file_name = file_name;
+                    }
+                        
+                    if let Some(p) = dirs::document_dir() {
+                        fd.config_mut().initial_directory = p;
+                    }
+                    fd.pick_file();
+                    self.file_dialog = Some(fd);
                 }
             }
         }
@@ -188,7 +275,7 @@ impl eframe::App for MyEguiApp {
             }
         }
 
-        // GUI Interface
+        /* GUI INTERFACE */
         egui::TopBottomPanel::top("menu").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("open process").clicked() {
@@ -212,7 +299,7 @@ impl eframe::App for MyEguiApp {
             ui.heading("File saving");
             ui.label(format!("Dirty? {}", self.is_dirty));
             ui.label(format!("File location: {:?}", self.save_file_location));
-            ui.label(format!("File Dialog: {:?}", self.save_file_dialog));
+            ui.label(format!("File Dialog: {:?}", self.file_dialog.as_ref().map(|fd| fd.state())));
             ui.add_space(10.0);
             ui.heading("Process Dialog");
             ui.label(format!("Selected process: {}", self.selected_process.as_ref().and_then(|p| self.system.process(p.pid())).and_then(|p| p.name().to_str()).unwrap_or("None")));
