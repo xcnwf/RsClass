@@ -1,12 +1,9 @@
 use eframe::egui;
-use egui::ahash::HashMap;
-use egui::{Frame, Style};
 use serde::{Deserialize, Serialize};
 use gui::type_selection_dialog::{self, TypeSelectionDialog};
 use sysinfo::{System, RefreshKind, ProcessRefreshKind};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ops::DerefMut;
 use std::path::{PathBuf, Path};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -36,7 +33,7 @@ struct MyEguiApp {
 
     // dialogs
     process_dialog: Option<ProcessDialog>,
-    type_selection_dialog: Option<TypeSelectionDialog>
+    type_selection_dialog: Option<TypeSelectionDialog>,
     closing_dialog: bool,
     file_dialog: Option<egui_file_dialog::FileDialog>,
     save_load_dialog: bool,
@@ -61,6 +58,8 @@ impl MyEguiApp {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let mut s = Self::default();
         let health = IntegerDataType::default();
+
+        let mut type_aliases = s.type_aliases.borrow_mut();
 
         // add default datatypes
         type_aliases.insert(String::from("Int"), IntegerDataType::default().into());
@@ -322,24 +321,31 @@ impl eframe::App for MyEguiApp {
                 if ui.add_enabled(self.is_dirty, save_button).clicked() {
                     self.state = State::Save;
                 };
+                if ui.button("type").clicked() {
+                    self.type_selection_dialog = Some(TypeSelectionDialog::new(self.type_aliases.clone()));
+                }
             });
         });
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Hello World!");
             ui.label(format!("App state: {:?}", self.state));
             ui.add_space(10.0);
+
             ui.heading("File saving");
             ui.label(format!("Dirty? {}", self.is_dirty));
             ui.label(format!("File location: {:?}", self.save_file_location));
             ui.label(format!("File Dialog: {:?}", self.file_dialog.as_ref().map(|fd| fd.state())));
             ui.add_space(10.0);
+
             ui.heading("Process Dialog");
             ui.label(format!("Selected process: {}", self.selected_process.as_ref().and_then(|p| self.system.process(p.pid())).and_then(|p| p.name().to_str()).unwrap_or("None")));
             let pstatus = self.process_dialog.as_ref().map(|pd| pd.state());
             ui.label(format!("Process window status: {:?}", pstatus));
-            ui.label(format!("Selected type : {:?}", self.selected_type));
-            ui.label(format!("{:?}", self.type_selection_dialog));
+            ui.add_space(10.0);
 
+            ui.heading("Type Selection Dialog");
+            ui.label(format!("Selected type : {:?}", self.selected_type));
+            ui.label(format!("dialog state : {:?}", self.type_selection_dialog.as_ref().map(|tsd| tsd.state())));
 
             if let Some(PDState::Selected(pid)) = pstatus {
                 self.system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
