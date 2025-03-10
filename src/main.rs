@@ -79,12 +79,23 @@ impl MyEguiApp {
 
 impl eframe::App for MyEguiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Check for closing
+        // Close if not in file dialog, and if not dirty
         let close_requested = ctx.input(|i| i.viewport().close_requested());
-        if close_requested && self.state != State::Quit &&self.is_dirty {
-            self.closing_dialog = true;
-            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        if close_requested {
+            match self.state {
+                State::Save | State::SaveAndQuit | State::Load => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                }
+                State::Normal => if self.is_dirty {
+                    self.closing_dialog = true;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                }
+                _ => {}
+            }
         }
+
+        /* DIALOGS */
+
         if self.closing_dialog {
             egui::Modal::new("close_unsaved_dialog".into()).show(ctx, 
             |ui| {
@@ -148,6 +159,10 @@ impl eframe::App for MyEguiApp {
                                 .and_then(|s| PathBuf::try_from(s).ok())
                                 .and_then(|path| path.with_extension("rsclass").to_str().map(ToOwned::to_owned))
                                 .unwrap_or("new_project.rsclass".into());
+
+                        if let Some(p) = dirs::document_dir() {
+                            fd.config_mut().initial_directory = p;
+                        }
                         fd.save_file();
                         self.save_file_dialog = Some(fd);
                     }

@@ -764,6 +764,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dirs"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3e8aa94d75141228480295a7d0e7feb620b1a5ad9f12bc40be62411e38cce4e"
+dependencies = [
+ "dirs-sys",
+]
+
+[[package]]
 name = "dirs-sys"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2454,6 +2463,7 @@ name = "rs_class"
 version = "0.1.0-alpha"
 dependencies = [
  "byteorder",
+ "dirs",
  "eframe",
  "egui",
  "egui-file-dialog",
