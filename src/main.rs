@@ -19,13 +19,16 @@ fn main() {
     eframe::run_native(&window_name, native_options, Box::new(|cc| Ok(Box::new(MyEguiApp::new(cc))))).expect("eframe should run");
 }
 
+// (Description: String, dt: DataTypeEnum)
+type Typedef = (String, DataTypeEnum);
+
 #[derive(Default)]
 struct MyEguiApp {
     struct_tabs: Vec<StructDataType>,
     system: System,
 
     // type system
-    type_aliases: Rc<RefCell<HashMap<String, DataTypeEnum>>>,
+    typedefs: Rc<RefCell<HashMap<String, Typedef>>>,
     selected_type: Option<String>,
 
     selected_process: Option<Process>,
@@ -59,20 +62,21 @@ impl MyEguiApp {
         let mut s = Self::default();
         let health = IntegerDataType::default();
 
-        let mut type_aliases = s.type_aliases.borrow_mut();
+        let mut typedefs = s.typedefs.borrow_mut();
 
         // add default datatypes
-        type_aliases.insert(String::from("Int"), IntegerDataType::default().into());
-        type_aliases.insert(String::from("UInt"), IntegerDataType::default().with_signed(false).into());
-        type_aliases.insert(String::from("DWORD"), IntegerDataType::default().with_hex(true).into());
-        type_aliases.insert(String::from("WORD"), IntegerDataType::default().with_hex(true).with_size(IntSize::Integer16).into());
-        type_aliases.insert(String::from("Char"), IntegerDataType::default().with_size(IntSize::Integer8).into());
-        type_aliases.insert(String::from("UChar"), IntegerDataType::default().with_size(IntSize::Integer8).with_signed(false).into());
-        type_aliases.insert(String::from("CStr"), StrDataType::default().into());
-        type_aliases.insert(String::from("Bool"), BooleanDataType::default().into());
-        type_aliases.insert(String::from("Float"), FloatDataType::default().into());
-        type_aliases.insert(String::from("Double"), FloatDataType::default().with_precision(FloatPrecision::Double).into());
-        drop(type_aliases);
+        typedefs.insert(String::from("Int"),("32-bit signed integer".into() ,IntegerDataType::default().into()));
+        typedefs.insert(String::from("UInt"),("32-bit unsiged integer".into() ,IntegerDataType::default().with_signed(false).into()));
+        typedefs.insert(String::from("DWORD"),("32-bit hexadecimal integer".into() ,IntegerDataType::default().with_hex(true).into()));
+        typedefs.insert(String::from("WORD"),("16-bit hexadecimal integer".into() ,IntegerDataType::default().with_hex(true).with_size(IntSize::Integer16).into()));
+        typedefs.insert(String::from("BYTE"),("8-bit hexadecimal integer".into() ,IntegerDataType::default().with_hex(true).with_size(IntSize::Integer8).into()));
+        typedefs.insert(String::from("Char"),("8-bit signed integer".into() ,IntegerDataType::default().with_size(IntSize::Integer8).into()));
+        typedefs.insert(String::from("UChar"),("8-bit unsigned integer".into() ,IntegerDataType::default().with_size(IntSize::Integer8).with_signed(false).into()));
+        typedefs.insert(String::from("CStr"),("Null-ternminated string".into() ,StrDataType::default().into()));
+        typedefs.insert(String::from("Bool"),("Single byte boolean".into() ,BooleanDataType::default().into()));
+        typedefs.insert(String::from("Float"),("Simple precision floating point number".into() ,FloatDataType::default().into()));
+        typedefs.insert(String::from("Double"),("Double precision floating point number".into() ,FloatDataType::default().with_precision(FloatPrecision::Double).into()));
+        drop(typedefs);
 
         let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()));
         println!("Got {} processes.", system.processes().len());
@@ -322,7 +326,7 @@ impl eframe::App for MyEguiApp {
                     self.state = State::Save;
                 };
                 if ui.button("type").clicked() {
-                    self.type_selection_dialog = Some(TypeSelectionDialog::new(self.type_aliases.clone()));
+                    self.type_selection_dialog = Some(TypeSelectionDialog::new(self.typedefs.clone()));
                 }
             });
         });

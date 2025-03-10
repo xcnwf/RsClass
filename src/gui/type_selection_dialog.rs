@@ -7,14 +7,14 @@ pub type State = super::DialogState<String>;
 #[derive(Debug)]
 pub struct TypeSelectionDialog {
     state: State,
-    typedefs: Rc<RefCell<HashMap<String, DataTypeEnum>>>,
+    typedefs: Rc<RefCell<HashMap<String, crate::Typedef>>>,
 
     search_string: String,
     selected_string: Option<String>,
 }
 
 impl TypeSelectionDialog {
-    pub fn new(typedefs: Rc<RefCell<HashMap<String, DataTypeEnum>>>) -> Self {
+    pub fn new(typedefs: Rc<RefCell<HashMap<String, crate::Typedef>>>) -> Self {
         TypeSelectionDialog {
             state: State::Open,
             search_string: Default::default(),
