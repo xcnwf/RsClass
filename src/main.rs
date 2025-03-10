@@ -2,10 +2,13 @@ use eframe::egui;
 use egui::ahash::HashMap;
 use egui::{Frame, Style};
 use serde::{Deserialize, Serialize};
+use gui::type_selection_dialog::{self, TypeSelectionDialog};
 use sysinfo::{System, RefreshKind, ProcessRefreshKind};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::DerefMut;
 use std::path::{PathBuf, Path};
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use rs_class::{typing::*, ops::*};
@@ -24,14 +27,16 @@ struct MyEguiApp {
     struct_tabs: Vec<StructDataType>,
     system: System,
 
-    // loaded type system
-    type_aliases: HashMap<String, DataTypeEnum>,
+    // type system
+    type_aliases: Rc<RefCell<HashMap<String, DataTypeEnum>>>,
+    selected_type: Option<String>,
 
     selected_process: Option<Process>,
     state: State,
 
     // dialogs
     process_dialog: Option<ProcessDialog>,
+    type_selection_dialog: Option<TypeSelectionDialog>
     closing_dialog: bool,
     file_dialog: Option<egui_file_dialog::FileDialog>,
     save_load_dialog: bool,
@@ -58,16 +63,17 @@ impl MyEguiApp {
         let health = IntegerDataType::default();
 
         // add default datatypes
-        s.type_aliases.insert(String::from("Int"), IntegerDataType::default().into());
-        s.type_aliases.insert(String::from("UInt"), IntegerDataType::default().with_signed(false).into());
-        s.type_aliases.insert(String::from("DWORD"), IntegerDataType::default().with_hex(true).into());
-        s.type_aliases.insert(String::from("WORD"), IntegerDataType::default().with_hex(true).with_size(IntSize::Integer16).into());
-        s.type_aliases.insert(String::from("Char"), IntegerDataType::default().with_size(IntSize::Integer8).into());
-        s.type_aliases.insert(String::from("UChar"), IntegerDataType::default().with_size(IntSize::Integer8).with_signed(false).into());
-        s.type_aliases.insert(String::from("CStr"), StrDataType::default().into());
-        s.type_aliases.insert(String::from("Bool"), BooleanDataType::default().into());
-        s.type_aliases.insert(String::from("Float"), FloatDataType::default().into());
-        s.type_aliases.insert(String::from("Double"), FloatDataType::default().with_precision(FloatPrecision::Double).into());
+        type_aliases.insert(String::from("Int"), IntegerDataType::default().into());
+        type_aliases.insert(String::from("UInt"), IntegerDataType::default().with_signed(false).into());
+        type_aliases.insert(String::from("DWORD"), IntegerDataType::default().with_hex(true).into());
+        type_aliases.insert(String::from("WORD"), IntegerDataType::default().with_hex(true).with_size(IntSize::Integer16).into());
+        type_aliases.insert(String::from("Char"), IntegerDataType::default().with_size(IntSize::Integer8).into());
+        type_aliases.insert(String::from("UChar"), IntegerDataType::default().with_size(IntSize::Integer8).with_signed(false).into());
+        type_aliases.insert(String::from("CStr"), StrDataType::default().into());
+        type_aliases.insert(String::from("Bool"), BooleanDataType::default().into());
+        type_aliases.insert(String::from("Float"), FloatDataType::default().into());
+        type_aliases.insert(String::from("Double"), FloatDataType::default().with_precision(FloatPrecision::Double).into());
+        drop(type_aliases);
 
         let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()));
         println!("Got {} processes.", system.processes().len());
@@ -287,6 +293,20 @@ impl eframe::App for MyEguiApp {
             }
         }
 
+        // Type Selection Window
+        if let Some(dialog) = self.type_selection_dialog.as_mut() {
+            dialog.show(ctx);
+            use type_selection_dialog::State;
+            match dialog.state() {
+                State::Closed => self.type_selection_dialog = None,
+                State::Selected(data) => {
+                    self.selected_type = Some(data.to_owned());
+                    self.type_selection_dialog = None;
+                }
+                _ => {}
+            }
+        }
+
         /* GUI INTERFACE */
         egui::TopBottomPanel::top("menu").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -317,6 +337,8 @@ impl eframe::App for MyEguiApp {
             ui.label(format!("Selected process: {}", self.selected_process.as_ref().and_then(|p| self.system.process(p.pid())).and_then(|p| p.name().to_str()).unwrap_or("None")));
             let pstatus = self.process_dialog.as_ref().map(|pd| pd.state());
             ui.label(format!("Process window status: {:?}", pstatus));
+            ui.label(format!("Selected type : {:?}", self.selected_type));
+            ui.label(format!("{:?}", self.type_selection_dialog));
 
 
             if let Some(PDState::Selected(pid)) = pstatus {
