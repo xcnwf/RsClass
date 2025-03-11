@@ -1,16 +1,18 @@
 use eframe::egui;
-use egui::ahash::HashMap;
-use egui::{Frame, Style};
 use serde::{Deserialize, Serialize};
+use gui::type_selection_dialog::{self, TypeSelectionDialog};
 use sysinfo::{System, RefreshKind, ProcessRefreshKind};
-use std::ops::DerefMut;
+use std::borrow::Cow;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::{PathBuf, Path};
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use rs_class::{typing::*, ops::*};
 
 mod gui;
-use gui::{ProcessDialog, State as GuiState};
+use gui::process_dialog::{ProcessDialog, State as PDState};
 
 fn main() {
     let native_options = eframe::NativeOptions::default();
@@ -18,15 +20,30 @@ fn main() {
     eframe::run_native(&window_name, native_options, Box::new(|cc| Ok(Box::new(MyEguiApp::new(cc))))).expect("eframe should run");
 }
 
+// (Description: String, dt: DataTypeEnum)
+type Typedef = (String, DataTypeEnum);
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SaveData<'a> {
+    typedefs: Cow<'a, HashMap<String, Typedef>>,
+    structs: Cow<'a, Vec<StructDataType>>,
+}
+
 #[derive(Default)]
 struct MyEguiApp {
     struct_tabs: Vec<StructDataType>,
     system: System,
+
+    // type system
+    typedefs: Rc<RefCell<HashMap<String, Typedef>>>,
+    selected_type: Option<String>,
+
     selected_process: Option<Process>,
     state: State,
 
     // dialogs
     process_dialog: Option<ProcessDialog>,
+    type_selection_dialog: Option<TypeSelectionDialog>,
     closing_dialog: bool,
     file_dialog: Option<egui_file_dialog::FileDialog>,
     save_load_dialog: bool,
@@ -51,6 +68,22 @@ impl MyEguiApp {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let mut s = Self::default();
 
+        let mut typedefs = s.typedefs.borrow_mut();
+
+        // add default datatypes
+        typedefs.insert(String::from("Int"),("32-bit signed integer".into() ,IntegerDataType::default().into()));
+        typedefs.insert(String::from("UInt"),("32-bit unsiged integer".into() ,IntegerDataType::default().with_signed(false).into()));
+        typedefs.insert(String::from("DWORD"),("32-bit hexadecimal integer".into() ,IntegerDataType::default().with_hex(true).into()));
+        typedefs.insert(String::from("WORD"),("16-bit hexadecimal integer".into() ,IntegerDataType::default().with_hex(true).with_size(IntSize::Integer16).into()));
+        typedefs.insert(String::from("BYTE"),("8-bit hexadecimal integer".into() ,IntegerDataType::default().with_hex(true).with_size(IntSize::Integer8).into()));
+        typedefs.insert(String::from("Char"),("8-bit signed integer".into() ,IntegerDataType::default().with_size(IntSize::Integer8).into()));
+        typedefs.insert(String::from("UChar"),("8-bit unsigned integer".into() ,IntegerDataType::default().with_size(IntSize::Integer8).with_signed(false).into()));
+        typedefs.insert(String::from("CStr"),("Null-ternminated string".into() ,StrDataType::default().into()));
+        typedefs.insert(String::from("Bool"),("Single byte boolean".into() ,BooleanDataType::default().into()));
+        typedefs.insert(String::from("Float"),("Simple precision floating point number".into() ,FloatDataType::default().into()));
+        typedefs.insert(String::from("Double"),("Double precision floating point number".into() ,FloatDataType::default().with_precision(FloatPrecision::Double).into()));
+        drop(typedefs);
+
         let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()));
         println!("Got {} processes.", system.processes().len());
         for (pid, p) in system.processes().iter().take(5) {
@@ -62,13 +95,22 @@ impl MyEguiApp {
 
     fn save_to_file(&self) -> Result<(), String> {
         let file = std::fs::File::create(self.save_file_location.as_ref().ok_or("please select a save location")?).map_err(|e| e.to_string())?;
-        ron::ser::to_writer_pretty(file, &self.struct_tabs, ron::ser::PrettyConfig::default())
+        
+        let td = self.typedefs.borrow();
+        let data_to_save = SaveData {
+            typedefs: Cow::Borrowed(&td),
+            structs: Cow::Borrowed(&self.struct_tabs),
+        };
+
+        ron::ser::to_writer_pretty(file, &data_to_save, ron::ser::PrettyConfig::default())
             .map_err(|e| e.to_string())
     }
 
     fn load_from_file(&mut self) -> Result<(), String> {
         let file = std::fs::File::open(self.save_file_location.as_ref().ok_or("No file path for load available")?).map_err(|e| e.to_string())?;
-        self.struct_tabs = ron::de::from_reader(file).map_err(|e| e.to_string())?;
+        let loaded_data: SaveData = ron::de::from_reader(file).map_err(|e| e.to_string())?;
+        self.struct_tabs = loaded_data.structs.into_owned();
+        self.typedefs = Rc::new(RefCell::new(loaded_data.typedefs.into_owned()));
         Ok(())
     }
 
@@ -260,10 +302,24 @@ impl eframe::App for MyEguiApp {
         if let Some(pd) = self.process_dialog.as_mut() {
             pd.show(ctx);
             match pd.state() {
-                GuiState::Closed => self.process_dialog = None,
-                GuiState::Selected(pid) => {
+                PDState::Closed => self.process_dialog = None,
+                PDState::Selected(pid) => {
                     self.selected_process = Some(Process::new(pid));
                     self.process_dialog = None;
+                }
+                _ => {}
+            }
+        }
+
+        // Type Selection Window
+        if let Some(dialog) = self.type_selection_dialog.as_mut() {
+            dialog.show(ctx);
+            use type_selection_dialog::State;
+            match dialog.state() {
+                State::Closed => self.type_selection_dialog = None,
+                State::Selected(data) => {
+                    self.selected_type = Some(data.to_owned());
+                    self.type_selection_dialog = None;
                 }
                 _ => {}
             }
@@ -284,24 +340,33 @@ impl eframe::App for MyEguiApp {
                 if ui.add_enabled(self.is_dirty, save_button).clicked() {
                     self.state = State::Save;
                 };
+                if ui.button("type").clicked() {
+                    self.type_selection_dialog = Some(TypeSelectionDialog::new(self.typedefs.clone()));
+                }
             });
         });
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Hello World!");
             ui.label(format!("App state: {:?}", self.state));
             ui.add_space(10.0);
+
             ui.heading("File saving");
             ui.label(format!("Dirty? {}", self.is_dirty));
             ui.label(format!("File location: {:?}", self.save_file_location));
             ui.label(format!("File Dialog: {:?}", self.file_dialog.as_ref().map(|fd| fd.state())));
             ui.add_space(10.0);
+
             ui.heading("Process Dialog");
             ui.label(format!("Selected process: {}", self.selected_process.as_ref().and_then(|p| self.system.process(p.pid())).and_then(|p| p.name().to_str()).unwrap_or("None")));
             let pstatus = self.process_dialog.as_ref().map(|pd| pd.state());
             ui.label(format!("Process window status: {:?}", pstatus));
+            ui.add_space(10.0);
 
+            ui.heading("Type Selection Dialog");
+            ui.label(format!("Selected type : {:?}", self.selected_type));
+            ui.label(format!("dialog state : {:?}", self.type_selection_dialog.as_ref().map(|tsd| tsd.state())));
 
-            if let Some(GuiState::Selected(pid)) = pstatus {
+            if let Some(PDState::Selected(pid)) = pstatus {
                 self.system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
                 if let Some(p) = self.system.process(pid) {
                     
