@@ -4,21 +4,13 @@ pub mod type_selection_dialog;
 #[derive(Copy, Debug, Clone, Eq, PartialEq)]
 pub enum DialogState<T> where T: Clone {
     Open,       // Visible
-    Closed,     // Destroyed
     Selected(T),// Selected
     Cancelled   // Cancelled
 }
 
-pub trait SelectDialog {
-    type SelectionType: Clone;
-
-    fn state(&self) -> &DialogState<Self::SelectionType>;
+pub trait Dialog<T: Clone>{
+    fn state(&self) -> &DialogState<T>;
     fn show(&mut self, ctx: &egui::Context);
     fn cancel(&mut self);
-    fn get_data(&self) -> Option<Self::SelectionType>;
-}
-
-pub enum Dialog {
-    ProcessSelection(process_dialog::ProcessDialog),
-    TypeSelection(type_selection_dialog::TypeSelectionDialog),
+    fn get_data(&self) -> Option<&T>;
 }
