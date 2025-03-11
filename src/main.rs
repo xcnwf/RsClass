@@ -2,6 +2,7 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 use gui::type_selection_dialog::{self, TypeSelectionDialog};
 use sysinfo::{System, RefreshKind, ProcessRefreshKind};
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{PathBuf, Path};
@@ -21,6 +22,12 @@ fn main() {
 
 // (Description: String, dt: DataTypeEnum)
 type Typedef = (String, DataTypeEnum);
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SaveData<'a> {
+    typedefs: Cow<'a, HashMap<String, Typedef>>,
+    structs: Cow<'a, Vec<StructDataType>>,
+}
 
 #[derive(Default)]
 struct MyEguiApp {
@@ -89,13 +96,22 @@ impl MyEguiApp {
 
     fn save_to_file(&self) -> Result<(), String> {
         let file = std::fs::File::create(self.save_file_location.as_ref().ok_or("please select a save location")?).map_err(|e| e.to_string())?;
-        ron::ser::to_writer_pretty(file, &self.struct_tabs, ron::ser::PrettyConfig::default())
+        
+        let td = self.typedefs.borrow();
+        let data_to_save = SaveData {
+            typedefs: Cow::Borrowed(&td),
+            structs: Cow::Borrowed(&self.struct_tabs),
+        };
+
+        ron::ser::to_writer_pretty(file, &data_to_save, ron::ser::PrettyConfig::default())
             .map_err(|e| e.to_string())
     }
 
     fn load_from_file(&mut self) -> Result<(), String> {
         let file = std::fs::File::open(self.save_file_location.as_ref().ok_or("No file path for load available")?).map_err(|e| e.to_string())?;
-        self.struct_tabs = ron::de::from_reader(file).map_err(|e| e.to_string())?;
+        let loaded_data: SaveData = ron::de::from_reader(file).map_err(|e| e.to_string())?;
+        self.struct_tabs = loaded_data.structs.into_owned();
+        self.typedefs = Rc::new(RefCell::new(loaded_data.typedefs.into_owned()));
         Ok(())
     }
 
