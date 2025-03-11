@@ -57,7 +57,7 @@ impl TypeSelectionDialog {
                     self.state = State::Cancelled;
                 }
             },
-            _ => {self.state = State::Closed},
+            _ => {},
         };
 
         self
