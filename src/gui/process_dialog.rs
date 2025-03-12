@@ -7,7 +7,7 @@
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use egui::RichText;
-use sysinfo::{Pid, System, ProcessesToUpdate::All};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate::All, RefreshKind, System};
 
 /*
  * From ReClassEx : https://github.com/ajkhoury/ReClassEx/blob/master/ReClass/DialogProcSelect.cpp
@@ -36,68 +36,28 @@ lazy_static::lazy_static! {
 use super::DialogState;
 pub type State = DialogState<Pid>;
 
+#[derive(Debug)]
 pub struct ProcessDialog {
     state: State,
     system: System,
     selected_process_id: Option<Pid>,
 }
+impl Default for ProcessDialog {
+    fn default() -> Self {
+        Self {
+            state: Default::default(),
+            system: System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::everything())),
+            selected_process_id: None
+        }
+    }
+
+    
+    
+}
 
 impl ProcessDialog {
-    pub fn new() -> Self {
-        ProcessDialog {
-            state: State::Closed,
-            system: Default::default(),
-            selected_process_id: None,
-        }
-    }
-
-    pub fn selected(&self) -> bool {
-        match self.state {
-            State::Selected(_) => true,
-            _ => false
-        }
-    }
-
-    pub fn cancel(&mut self) {
-        self.state = State::Cancelled;
-    }
-
-    pub fn state(&self) -> State {
-        self.state
-    }
-    pub fn pid(&self) -> Option<Pid> {
-        match self.state {
-            State::Selected(pid) => Some(pid.clone()),
-            _ => None
-        }
-    }
-
     fn refresh(&mut self) {
         self.system.refresh_processes(All, true);
-    }
-
-    // Opens the dialog
-    pub fn open(&mut self) {
-        self.state = State::Open;
-        self.refresh();
-    }
-
-    pub fn show(&mut self, ctx: &egui::Context) -> &Self {
-        self.state = match self.state {
-            State::Open => {
-                let mut is_open = true;
-                self.ui(ctx, &mut is_open);
-                
-                if is_open {
-                    self.state
-                } else {
-                    State::Cancelled
-                }
-            },
-            _ => State::Closed,
-        };
-
-        self
     }
 
     fn ui(&mut self, ctx: &egui::Context, is_open: &mut bool) {
@@ -158,5 +118,32 @@ impl ProcessDialog {
                 });
             }
         );
+    }
+}
+
+impl super::Dialog<Pid> for ProcessDialog {
+    fn get_data(&self) -> Option<&Pid> {
+        if let State::Selected(p) = &self.state {
+            Some(p)
+        } else {
+            None
+        }
+    }
+
+    fn state(&self) -> &State {
+        &self.state
+    }
+
+    fn cancel(&mut self) {
+        self.state = State::Cancelled;
+    }
+
+    fn show(&mut self, ctx: &egui::Context) {
+        let mut is_open = true;
+        self.ui(ctx, &mut is_open);
+        
+        if !is_open && self.state == State::Open {
+            self.state = State::Cancelled
+        }
     }
 }
