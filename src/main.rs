@@ -43,7 +43,7 @@ struct MyEguiApp {
     selected_type: Option<String>,
 
     selected_process: Option<Process>,
-    state: State,
+    state: AppState,
 
     // file saving
     save_file_location: Option<PathBuf>,
@@ -57,7 +57,7 @@ enum SaveType {
 }
 
 #[derive(Debug, Default)]
-enum State {
+enum AppState {
     #[default]
     Normal,
     ProcessSelection(gui::process_dialog::ProcessDialog),
@@ -119,7 +119,7 @@ impl MyEguiApp {
     }
 
     fn quit(&mut self, ctx: &egui::Context) {
-        self.state = State::Quit;
+        self.state = AppState::Quit;
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
 }
@@ -130,10 +130,10 @@ impl eframe::App for MyEguiApp {
         let close_requested = ctx.input(|i| i.viewport().close_requested());
         if close_requested {
             match self.state {
-                State::Save(_,_) | State::PromptForSave(_,_) | State::Load(_) => {
+                AppState::Save(_,_) | AppState::PromptForSave(_,_) | AppState::Load(_) => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 },
-                State::Quit => {},
+                AppState::Quit => {},
                 _ => if self.is_dirty {
                     ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 }
@@ -143,22 +143,22 @@ impl eframe::App for MyEguiApp {
         /* DIALOGS AND STATE TRANSITIONS */
         let s_ref = &mut self.state;
         let nstate = match s_ref {
-            State::Normal => None,
-            State::Quit => if self.is_dirty {
-                Some(State::PromptForSave(Default::default(), SaveType::Quit))
+            AppState::Normal => None,
+            AppState::Quit => if self.is_dirty {
+                Some(AppState::PromptForSave(Default::default(), SaveType::Quit))
             } else {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                Some(State::Quit)
+                Some(AppState::Quit)
             },
-            State::Load(ld)  => {
+            AppState::Load(ld)  => {
                 if self.is_dirty {
-                    Some(State::PromptForSave(Default::default(), SaveType::Load))
+                    Some(AppState::PromptForSave(Default::default(), SaveType::Load))
                 } else {
                     ld.show(ctx);
                     use gui::load_dialog::State as DialogState;
                     match ld.state() {
                         DialogState::Open => None,
-                        DialogState::Cancelled => Some(State::Normal),
+                        DialogState::Cancelled => Some(AppState::Normal),
                         DialogState::Selected(p) => {
                             self.save_file_location = Some(p.clone());
                             let save_success = self.load_from_file();
@@ -171,12 +171,12 @@ impl eframe::App for MyEguiApp {
                                     eprintln!("ERROR: Could not save to file: {}", err_s);
                                 }
                             }
-                            Some(State::Normal)
+                            Some(AppState::Normal)
                         }
                     }
                 }
             },
-            State::Save(dialog, save_type) => {
+            AppState::Save(dialog, save_type) => {
                 let st = *save_type;
                 if self.save_file_location.is_some() {
                     let load_success = self.save_to_file();
@@ -185,14 +185,14 @@ impl eframe::App for MyEguiApp {
                             println!("File successfully loaded!");
                             self.is_dirty = false;
                             match st {
-                                SaveType::Quit => Some(State::Quit),
-                                SaveType::Load => Some(State::Load(LoadDialog::new(self))),
-                                SaveType::Normal => Some(State::Normal),
+                                SaveType::Quit => Some(AppState::Quit),
+                                SaveType::Load => Some(AppState::Load(LoadDialog::new(self))),
+                                SaveType::Normal => Some(AppState::Normal),
                             }
                         },
                         Err(err_s) => {
                             eprintln!("ERROR: Could not load from file: {}", err_s);
-                            Some(State::Normal)
+                            Some(AppState::Normal)
                         }
                     }
                 } else {
@@ -200,7 +200,7 @@ impl eframe::App for MyEguiApp {
                     use gui::save_dialog::State as DialogState;
                     match dialog.state() {
                         DialogState::Open => None,
-                        DialogState::Cancelled => Some(State::Normal),
+                        DialogState::Cancelled => Some(AppState::Normal),
                         DialogState::Selected(p) => {
                             self.save_file_location = Some(p.clone());
                             None
@@ -224,46 +224,46 @@ impl eframe::App for MyEguiApp {
                     }
                 }
             },
-            State::PromptForSave(dialog, save_type) => {
+            AppState::PromptForSave(dialog, save_type) => {
                 dialog.show(ctx);
                 use gui::prompt_save_dialog::State as DialogState;
                 match dialog.state() {
                     DialogState::Open => None,
-                    DialogState::Cancelled => Some(State::Normal),
+                    DialogState::Cancelled => Some(AppState::Normal),
                     DialogState::Selected(Choice::Save) => {
                         let st = *save_type;
-                        Some(State::Save(SaveDialog::new(self), st))
+                        Some(AppState::Save(SaveDialog::new(self), st))
                     },
                     DialogState::Selected(Choice::Discard) => match save_type {
-                            SaveType::Quit => Some(State::Quit),
-                            SaveType::Load => Some(State::Load(LoadDialog::new(self))),
-                            SaveType::Normal => Some(State::Normal),
+                            SaveType::Quit => Some(AppState::Quit),
+                            SaveType::Load => Some(AppState::Load(LoadDialog::new(self))),
+                            SaveType::Normal => Some(AppState::Normal),
                         }
                 }
             }
-            State::ProcessSelection(dialog) => {
+            AppState::ProcessSelection(dialog) => {
                 dialog.show(ctx);
                 use gui::process_dialog::State as DialogState;
                 match dialog.state() {
                     DialogState::Open => None,
                     DialogState::Selected(pid) => {
                         self.selected_process = Some(Process::new(pid.clone()));
-                        Some(State::Normal)
+                        Some(AppState::Normal)
                     }
-                    DialogState::Cancelled => Some(State::Normal)
+                    DialogState::Cancelled => Some(AppState::Normal)
                 }
             },
-            State::TypeSelection(dialog) => {
+            AppState::TypeSelection(dialog) => {
                 dialog.show(ctx);
                 use type_selection_dialog::State as DialogState;
                 match dialog.state() {
                     DialogState::Open => None,
                     DialogState::Selected(data) => {
                         self.selected_type = Some(data.to_owned());
-                        Some(State::Normal)
+                        Some(AppState::Normal)
                     },
                     DialogState::Cancelled => {
-                        Some(State::Normal)
+                        Some(AppState::Normal)
                     }
                 }
             },
@@ -278,18 +278,18 @@ impl eframe::App for MyEguiApp {
             ui.horizontal(|ui| {
                 if ui.button("open process").clicked() {
                     let dialog = ProcessDialog::default();
-                    self.state = State::ProcessSelection(dialog);
+                    self.state = AppState::ProcessSelection(dialog);
                 };
                 if ui.button("load").clicked() {
-                    self.state = State::Load(LoadDialog::new(self));
+                    self.state = AppState::Load(LoadDialog::new(self));
                 };
                 let save_button = egui::Button::new("save");
                 if ui.add_enabled(self.is_dirty, save_button).clicked() {
-                    self.state = State::Save(SaveDialog::new(self), SaveType::Normal);
+                    self.state = AppState::Save(SaveDialog::new(self), SaveType::Normal);
                 };
                 if ui.button("type").clicked() {
                     let dialog = TypeSelectionDialog::new(self.typedefs.clone());
-                    self.state = State::TypeSelection(dialog);
+                    self.state = AppState::TypeSelection(dialog);
                 }
             });
         });
