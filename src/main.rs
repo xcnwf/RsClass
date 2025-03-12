@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use rs_class::{typing::*, ops::*};
+use rs_class::{typing::{BooleanDataType, DataTypeEnum, FloatDataType, FloatPrecision, IntSize, IntegerDataType, StrDataType, StructDataType}, ops::{Process, SystemProcess}};
 
 mod gui;
 use gui::{Dialog, DialogState};
@@ -163,7 +163,7 @@ impl eframe::App for MyEguiApp {
                                     self.is_dirty = false;
                                 }
                                 Err(err_s) => {
-                                    eprintln!("ERROR: Could not save to file: {}", err_s);
+                                    eprintln!("ERROR: Could not save to file: {err_s}");
                                 }
                             }
                             Some(AppState::Normal)
@@ -186,7 +186,7 @@ impl eframe::App for MyEguiApp {
                             }
                         },
                         Err(err_s) => {
-                            eprintln!("ERROR: Could not load from file: {}", err_s);
+                            eprintln!("ERROR: Could not load from file: {err_s}");
                             Some(AppState::Normal)
                         }
                     }

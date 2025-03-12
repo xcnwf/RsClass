@@ -48,7 +48,7 @@ impl TypeSelectionDialog {
     fn ui(&mut self, ctx: &egui::Context, is_open: &mut bool) {
         let viewport_rect = ctx.input(|is| is.viewport().inner_rect);
         let area = egui::Modal::default_area(egui::Id::new("type_selection_dialog_area"))
-            .default_size(viewport_rect.map(|r|egui::vec2(r.height()*0.75, r.width()*0.75)).unwrap_or(egui::vec2(f32::MAX, f32::MAX)));
+            .default_size(viewport_rect.map_or(egui::vec2(f32::MAX, f32::MAX), |r|egui::vec2(r.height()*0.75, r.width()*0.75)));
         let window = egui::Modal::new("Process Selection Window".into()).area(area);
         if window.show(ctx, |ui| {
             self.ui_in_window(ui);

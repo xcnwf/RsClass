@@ -61,7 +61,7 @@ impl super::SystemProcess for WinProcess {
         let mut read_buffer: Vec<u8> = Vec::with_capacity(size);
         let mut bytes_read = 0usize;
         unsafe {
-            let r = ReadProcessMemory(handle, location as *const std::ffi::c_void, read_buffer.as_mut_ptr() as *mut core::ffi::c_void, size, &mut bytes_read);
+            let r = ReadProcessMemory(handle, location as *const std::ffi::c_void, read_buffer.as_mut_ptr().cast::<core::ffi::c_void>(), size, &mut bytes_read);
             if r == 0 {
                 return Err(format!("Could not read memory, error: {}.",GetLastError()))
             }
@@ -78,7 +78,7 @@ impl super::SystemProcess for WinProcess {
         let size = what.len();
         let mut bytes_written = 0usize;
         unsafe {
-            let r = WriteProcessMemory(handle, location as *const std::ffi::c_void, what.as_ptr() as *const core::ffi::c_void, size, &mut bytes_written);
+            let r = WriteProcessMemory(handle, location as *const std::ffi::c_void, what.as_ptr().cast::<core::ffi::c_void>(), size, &mut bytes_written);
             if r == 0 {
                 return Err(format!("Could not write memory, error: {}.",GetLastError()))
             }

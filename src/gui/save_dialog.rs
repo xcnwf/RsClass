@@ -13,7 +13,7 @@ pub struct SaveDialog  {
 impl SaveDialog  {
     pub fn new(app: &crate::MyEguiApp) -> Self {
         let mut fd: egui_file_dialog::FileDialog = egui_file_dialog::FileDialog::new()
-            .add_file_filter("rsclass", Arc::new(|path| path.extension().map(|ext| ext == "rsclass").unwrap_or_default()))
+            .add_file_filter("rsclass", Arc::new(|path| path.extension().is_some_and(|ext| ext == "rsclass")))
             .default_file_filter("rsclass");
         if let Some(s) = app
             .selected_process
@@ -42,13 +42,13 @@ impl SaveDialog  {
 impl super::Dialog<PathBuf> for SaveDialog {
     fn show(&mut self, ctx: &egui::Context) {
         self.file_dialog.update(ctx);
-        use egui_file_dialog::DialogState::*;
+        use egui_file_dialog::DialogState::{Cancelled, Open, Picked};
         match self.file_dialog.state() {
             Open => {},
             Picked(p) => self.state = State::Selected(p.clone()),
             Cancelled => {
                 println!("User did not choose save file, saving is cancelled");
-                self.state = State::Cancelled
+                self.state = State::Cancelled;
             },
             _ => unreachable!(),
         }

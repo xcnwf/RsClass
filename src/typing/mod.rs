@@ -118,7 +118,7 @@ pub enum IntSize {
 }
 impl From<IntSize> for usize {
     fn from(val: IntSize) -> Self {
-        use IntSize::*;
+        use IntSize::{Integer16, Integer32, Integer64, Integer8};
         match val {
             Integer8 => 1,
             Integer16 => 2,
@@ -130,7 +130,7 @@ impl From<IntSize> for usize {
 impl TryFrom<usize> for IntSize {
     type Error = &'static str;
     fn try_from(value: usize) -> Result<Self, Self::Error> {
-        use IntSize::*;
+        use IntSize::{Integer16, Integer32, Integer64, Integer8};
         match value {
             1 => Ok(Integer8),
             2 => Ok(Integer16),
@@ -165,7 +165,7 @@ impl DataType for IntegerDataType {
             return Err(());
         };
         let val = match self.get_size() {
-            1 => Ok(data[0] as u64),
+            1 => Ok(u64::from(data[0])),
             2..=8 => match self.endianness {
                 Endianness::Little => Ok(LittleEndian::read_uint(data, self.get_size())),
                 Endianness::Big => Ok(BigEndian::read_uint(data, self.get_size())),
@@ -174,7 +174,7 @@ impl DataType for IntegerDataType {
         }?;
 
         let s = match (self.hex, self.signed) {
-            (true, _) => format!("{:#X}", val),
+            (true, _) => format!("{val:#X}"),
             (false, true) => {
                 let p = 8 * self.get_size();
                 let mut signed_val = val;
@@ -183,7 +183,7 @@ impl DataType for IntegerDataType {
                 }
                 format!("{}", signed_val as i64)
             }
-            (false, false) => format!("{}", val),
+            (false, false) => format!("{val}"),
         };
         Ok(s)
     }
@@ -223,7 +223,7 @@ impl IntegerDataType {
     }
 
     pub fn set_size(&mut self, size: IntSize) {
-        self.size = size
+        self.size = size;
     }
     pub fn with_size(mut self, size: IntSize) -> Self {
         self.set_size(size);
@@ -240,7 +240,7 @@ pub enum FloatPrecision {
 }
 impl FloatPrecision {
     pub fn toggle(&self) -> Self {
-        use FloatPrecision::*;
+        use FloatPrecision::{Double, Simple};
         match self {
             Simple => Double,
             Double => Simple    
@@ -254,7 +254,7 @@ pub struct FloatDataType {
 }
 impl DataType for FloatDataType {
     fn get_size(&self) -> usize {
-        use FloatPrecision::*;
+        use FloatPrecision::{Double, Simple};
         match self.precision {
             Simple => 4,
             Double => 8,
@@ -268,21 +268,21 @@ impl DataType for FloatDataType {
             return Err(());
         }
 
-        use Endianness::*;
+        use Endianness::{Big, Little};
         match self.precision {
             FloatPrecision::Simple => {
                 let val = match self.endianness {
                     Big => BigEndian::read_f32(data),
                     Little => LittleEndian::read_f32(data),
                 };
-                Ok(format!("{:.3}", val))
+                Ok(format!("{val:.3}"))
             }
             FloatPrecision::Double => {
                 let val = match self.endianness {
                     Big => BigEndian::read_f64(data),
                     Little => LittleEndian::read_f64(data),
                 };
-                Ok(format!("{:.3}", val))
+                Ok(format!("{val:.3}"))
             }
         }
     }
@@ -385,7 +385,7 @@ impl StructDataType {
         &self.entries
     }
     pub fn push_entry(&mut self, mut e: StructEntry) {
-        e.offset = self.entries.last().map(|e| e.offset + e.datatype.get_size()).unwrap_or(0 );
+        e.offset = self.entries.last().map_or(0, |e| e.offset + e.datatype.get_size());
         self.entries.push(e);
     }
     pub fn insert_entry(&mut self, _idx: usize, _e: StructEntry) {   

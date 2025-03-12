@@ -63,7 +63,7 @@ impl ProcessDialog {
     fn ui(&mut self, ctx: &egui::Context, is_open: &mut bool) {
         let window = egui::Modal::new("Process Selection Window".into());
         if window.show(ctx, |ui| {
-            self.ui_in_window(ui)
+            self.ui_in_window(ui);
         }).should_close(){
             *is_open = false;
         }
@@ -74,7 +74,7 @@ impl ProcessDialog {
         let viewport_rect = ui.input(|is| is.viewport().inner_rect);
 
         egui::ScrollArea::vertical()
-            .max_height(viewport_rect.map(|r| r.height()/2.0).unwrap_or(f32::MAX))
+            .max_height(viewport_rect.map_or(f32::MAX, |r| r.height()/2.0))
             .show(ui, |ui | {
             
             for (pid, process) in self.system.processes() {
@@ -109,7 +109,7 @@ impl ProcessDialog {
                     let ok_button = egui::Button::new("Ok");
                     if ui.add_enabled(x.selected_process_id.is_some(), ok_button).clicked() {
                         if let Some(pid) = x.selected_process_id {
-                            x.state = State::Selected(pid.to_owned());
+                            x.state = State::Selected(pid);
                         }
                     }
                     if ui.button("Close").clicked() {
@@ -131,7 +131,7 @@ impl super::Dialog<Pid> for ProcessDialog {
         self.ui(ctx, &mut is_open);
         
         if !is_open && self.state == State::Open {
-            self.state = State::Cancelled
+            self.state = State::Cancelled;
         }
     }
 }
