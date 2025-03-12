@@ -122,20 +122,8 @@ impl ProcessDialog {
 }
 
 impl super::Dialog<Pid> for ProcessDialog {
-    fn get_data(&self) -> Option<&Pid> {
-        if let State::Selected(p) = &self.state {
-            Some(p)
-        } else {
-            None
-        }
-    }
-
     fn state(&self) -> &State {
         &self.state
-    }
-
-    fn cancel(&mut self) {
-        self.state = State::Cancelled;
     }
 
     fn show(&mut self, ctx: &egui::Context) {

@@ -1,6 +1,5 @@
 use egui::RichText;
 use std::{rc::Rc, cell::RefCell, collections::HashMap};
-use rs_class::typing::DataTypeEnum;
 
 pub type State = super::DialogState<String>;
 
@@ -23,13 +22,6 @@ impl TypeSelectionDialog {
         }
     }
 
-    pub fn selected(&self) -> bool {
-        match self.state {
-            State::Selected(_) => true,
-            _ => false
-        }
-    }
-
     pub fn cancel(&mut self) {
         self.state = State::Cancelled;
     }
@@ -38,26 +30,16 @@ impl TypeSelectionDialog {
         &self.state
     }
 
-    pub fn datatype(&self) -> Option<String> {
-        match &self.state {
-            State::Selected(data) => Some(data.clone()),
-            _ => None
-        }
-    }
-
     pub fn show(&mut self, ctx: &egui::Context) -> &Self {
-        match self.state {
-            State::Open => {
-                let mut is_open = true;
-                self.ui(ctx, &mut is_open);
+        if self.state == State::Open {
+            let mut is_open = true;
+            self.ui(ctx, &mut is_open);
+            
+            if is_open {
                 
-                if is_open {
-                    
-                } else {
-                    self.state = State::Cancelled;
-                }
-            },
-            _ => {},
+            } else {
+                self.state = State::Cancelled;
+            }
         };
 
         self
@@ -69,7 +51,7 @@ impl TypeSelectionDialog {
             .default_size(viewport_rect.map(|r|egui::vec2(r.height()*0.75, r.width()*0.75)).unwrap_or(egui::vec2(f32::MAX, f32::MAX)));
         let window = egui::Modal::new("Process Selection Window".into()).area(area);
         if window.show(ctx, |ui| {
-            self.ui_in_window(ui)
+            self.ui_in_window(ui);
         }).should_close(){
             *is_open = false;
         }
@@ -92,7 +74,7 @@ impl TypeSelectionDialog {
                 let label_response = ui.selectable_value(
                     &mut self.selected_string,
                     Some(name.clone()), 
-                    RichText::new(format!("{}", name))
+                    RichText::new(name.to_string())
                 );
                 if label_response.double_clicked() {
                     self.state = State::Selected(name.clone());

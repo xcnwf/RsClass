@@ -1,22 +1,21 @@
 use eframe::egui;
-use gui::load_dialog::LoadDialog;
-use gui::prompt_save_dialog::Choice;
-use gui::save_dialog::SaveDialog;
-use gui::{prompt_save_dialog, Dialog, DialogState};
 use serde::{Deserialize, Serialize};
-use gui::type_selection_dialog::{self, TypeSelectionDialog};
 use sysinfo::{System, RefreshKind, ProcessRefreshKind};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::{PathBuf, Path};
+use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 
 use rs_class::{typing::*, ops::*};
 
 mod gui;
-use gui::process_dialog::{ProcessDialog, State as PDState};
+use gui::{Dialog, DialogState};
+use gui::process_dialog::ProcessDialog;
+use gui::type_selection_dialog::TypeSelectionDialog;
+use gui::load_dialog::LoadDialog;
+use gui::save_dialog::SaveDialog;
+use gui::prompt_save_dialog::Choice;
 
 fn main() {
     let native_options = eframe::NativeOptions::default();
@@ -56,6 +55,7 @@ enum SaveType {
     Quit
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Default)]
 enum AppState {
     #[default]
@@ -116,11 +116,6 @@ impl MyEguiApp {
         self.struct_tabs = loaded_data.structs.into_owned();
         self.typedefs = Rc::new(RefCell::new(loaded_data.typedefs.into_owned()));
         Ok(())
-    }
-
-    fn quit(&mut self, ctx: &egui::Context) {
-        self.state = AppState::Quit;
-        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
 }
 
@@ -197,7 +192,6 @@ impl eframe::App for MyEguiApp {
                     }
                 } else {
                     dialog.show(ctx);
-                    use gui::save_dialog::State as DialogState;
                     match dialog.state() {
                         DialogState::Open => None,
                         DialogState::Cancelled => Some(AppState::Normal),
@@ -226,7 +220,6 @@ impl eframe::App for MyEguiApp {
             },
             AppState::PromptForSave(dialog, save_type) => {
                 dialog.show(ctx);
-                use gui::prompt_save_dialog::State as DialogState;
                 match dialog.state() {
                     DialogState::Open => None,
                     DialogState::Cancelled => Some(AppState::Normal),
@@ -243,11 +236,10 @@ impl eframe::App for MyEguiApp {
             }
             AppState::ProcessSelection(dialog) => {
                 dialog.show(ctx);
-                use gui::process_dialog::State as DialogState;
                 match dialog.state() {
                     DialogState::Open => None,
                     DialogState::Selected(pid) => {
-                        self.selected_process = Some(Process::new(pid.clone()));
+                        self.selected_process = Some(Process::new(*pid));
                         Some(AppState::Normal)
                     }
                     DialogState::Cancelled => Some(AppState::Normal)
@@ -255,7 +247,6 @@ impl eframe::App for MyEguiApp {
             },
             AppState::TypeSelection(dialog) => {
                 dialog.show(ctx);
-                use type_selection_dialog::State as DialogState;
                 match dialog.state() {
                     DialogState::Open => None,
                     DialogState::Selected(data) => {

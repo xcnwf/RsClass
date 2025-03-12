@@ -20,7 +20,7 @@ impl SaveDialog  {
             .as_ref()
             .and_then(|p| app.system.process(p.pid()))
             .and_then(|p| p.name().to_str())
-            .map(|s| PathBuf::from(s))
+            .map(PathBuf::from)
             .and_then(|path| path.with_extension("rsclass").to_str().map(ToOwned::to_owned))
         {
             fd.config_mut().default_file_name = s;
@@ -54,17 +54,6 @@ impl super::Dialog<PathBuf> for SaveDialog {
         }
     }
 
-    fn cancel(&mut self) {
-        self.state = State::Cancelled;
-    }
-
-    fn get_data(&self) -> Option<&PathBuf> {
-        if let State::Selected(c) = &self.state {
-            Some(c)
-        } else {
-            None
-        }
-    }
     fn state(&self) -> &super::DialogState<PathBuf> {
         &self.state
     }

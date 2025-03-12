@@ -16,6 +16,4 @@ pub enum DialogState<T> where T: Clone {
 pub trait Dialog<T: Clone>{
     fn state(&self) -> &DialogState<T>;
     fn show(&mut self, ctx: &egui::Context);
-    fn cancel(&mut self);
-    fn get_data(&self) -> Option<&T>;
 }

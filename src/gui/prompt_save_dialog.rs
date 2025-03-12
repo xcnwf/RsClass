@@ -28,17 +28,6 @@ impl super::Dialog<Choice> for PromptSaveDialog {
         });
     }
 
-    fn cancel(&mut self) {
-        self.state = State::Cancelled;
-    }
-
-    fn get_data(&self) -> Option<&Choice> {
-        if let State::Selected(c) = &self.state {
-            Some(c)
-        } else {
-            None
-        }
-    }
     fn state(&self) -> &super::DialogState<Choice> {
         &self.state
     }

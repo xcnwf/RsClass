@@ -1,5 +1,3 @@
-#![cfg(target_os="windows")]
-
 use sysinfo::Pid;
 
 use crate::typing::DataType;
@@ -68,11 +66,11 @@ impl super::SystemProcess for WinProcess {
                 return Err(format!("Could not read memory, error: {}.",GetLastError()))
             }
             if bytes_read != size {
-                return Err(format!("Memory read has a smaller size than requested."))
+                return Err("Memory read has a smaller size than requested.".to_string())
             }
             read_buffer.set_len(bytes_read);
         };
-        return Ok(read_buffer);
+        Ok(read_buffer)
     }
 
     fn write_memory(&mut self, location: u64, what: Vec<u8>) -> Result<(), String> {
@@ -80,15 +78,15 @@ impl super::SystemProcess for WinProcess {
         let size = what.len();
         let mut bytes_written = 0usize;
         unsafe {
-            let r = WriteProcessMemory(handle, location as *const std::ffi::c_void, what.as_ptr() as *const core::ffi::c_void, size, &raw mut bytes_written as *mut usize);
+            let r = WriteProcessMemory(handle, location as *const std::ffi::c_void, what.as_ptr() as *const core::ffi::c_void, size, &mut bytes_written);
             if r == 0 {
                 return Err(format!("Could not write memory, error: {}.",GetLastError()))
             }
             if bytes_written != size {
-                return Err(format!("Memory written was smaller than requested !"));
+                return Err("Memory written was smaller than requested !".to_string());
             }
         };
-        return Ok(());
+        Ok(())
     }
 
     fn close(&mut self) {

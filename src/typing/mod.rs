@@ -18,7 +18,7 @@ impl ArchSize {
 }
 
 thread_local! {
-    static ARCH_SIZE: std::cell::Cell<ArchSize> = std::cell::Cell::new(ArchSize::Arch32);
+    static ARCH_SIZE: std::cell::Cell<ArchSize> = const { std::cell::Cell::new(ArchSize::Arch32) };
 }
 
 // ENDIANNESS
@@ -83,7 +83,7 @@ impl DataType for BooleanDataType {
         self.size
     }
     fn get_name(&self) -> String {
-        return "Boolean".into();
+        "Boolean".into()
     }
     fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
         if data.len() != self.size {
@@ -116,10 +116,10 @@ pub enum IntSize {
     Integer32,
     Integer64,
 }
-impl Into<usize> for IntSize {
-    fn into(self) -> usize {
+impl From<IntSize> for usize {
+    fn from(val: IntSize) -> Self {
         use IntSize::*;
-        match self {
+        match val {
             Integer8 => 1,
             Integer16 => 2,
             Integer32 => 4,
@@ -154,7 +154,7 @@ impl Default for IntegerDataType {
 }
 impl DataType for IntegerDataType {
     fn get_size(&self) -> usize {
-        return self.size.into();
+        self.size.into()
     }
     fn get_name(&self) -> String {
         "Integer".into()
@@ -179,7 +179,7 @@ impl DataType for IntegerDataType {
                 let p = 8 * self.get_size();
                 let mut signed_val = val;
                 if (val >> (p - 1)) == 1 {
-                    signed_val = (u64::MAX ^ ((1 << p) - 1)) | signed_val;
+                    signed_val |= u64::MAX ^ ((1 << p) - 1);
                 }
                 format!("{}", signed_val as i64)
             }
@@ -360,7 +360,7 @@ impl DataType for StructDataType {
         self.entries.iter().map(|e| e.size).sum()
     }
     fn get_name(&self) -> String {
-        return self.name.clone();
+        self.name.clone()
     }
     fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
         if data.len() != self.get_size() {
@@ -388,7 +388,7 @@ impl StructDataType {
         e.offset = self.entries.last().map(|e| e.offset + e.datatype.get_size()).unwrap_or(0 );
         self.entries.push(e);
     }
-    pub fn insert_entry(&mut self, idx: usize, mut e: StructEntry) {   
+    pub fn insert_entry(&mut self, _idx: usize, _e: StructEntry) {   
         todo!("Insert entry")
     }
 }
