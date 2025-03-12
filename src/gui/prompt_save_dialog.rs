@@ -1,5 +1,3 @@
-use crate::MyEguiApp;
-
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Choice {
     Save,
@@ -7,17 +5,9 @@ pub enum Choice {
 }
 type State = super::DialogState<Choice>;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PromptSaveDialog {
     state: State,
-}
-
-impl Default for PromptSaveDialog {
-    fn default() -> Self {
-        Self {
-            state: State::Open,
-        }
-    }
 }
 
 impl super::Dialog<Choice> for PromptSaveDialog {
