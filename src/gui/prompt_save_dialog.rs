@@ -3,7 +3,7 @@ pub enum Choice {
     Save,
     Discard
 }
-type State = super::DialogState<Choice>;
+pub type State = super::DialogState<Choice>;
 
 #[derive(Debug, Default)]
 pub struct PromptSaveDialog {
