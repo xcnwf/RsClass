@@ -42,7 +42,7 @@ impl Endianness {
 pub trait DataType {
     fn get_size(&self) -> usize;
     fn get_name(&self) -> String;
-    fn from_bytes(&self, data: &[u8]) -> Result<String, ()>;
+    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()>;
 
     fn clone_box(&self) -> Box<dyn DataType>
     where
@@ -85,7 +85,7 @@ impl DataType for BooleanDataType {
     fn get_name(&self) -> String {
         "Boolean".into()
     }
-    fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
+    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()> {
         if data.len() != self.size {
             return Err(());
         }
@@ -160,7 +160,7 @@ impl DataType for IntegerDataType {
         "Integer".into()
     }
 
-    fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
+    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()> {
         if data.len() != self.get_size() {
             return Err(());
         };
@@ -263,7 +263,7 @@ impl DataType for FloatDataType {
     fn get_name(&self) -> String {
         "Float".into()
     }
-    fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
+    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()> {
         if data.len() != self.get_size() {
             return Err(());
         }
@@ -325,7 +325,7 @@ impl DataType for StrDataType {
         String::from("Null terminated string")
     }
 
-    fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
+    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()> {
         if data.len() != self.get_size() {
             return Err(());
         }
@@ -362,14 +362,14 @@ impl DataType for StructDataType {
     fn get_name(&self) -> String {
         self.name.clone()
     }
-    fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
+    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()> {
         if data.len() != self.get_size() {
             return Err(());
         }
 
         let mut reprs = Vec::new();
         for e in &self.entries {
-            reprs.push(format!("{}: {}",e.name, e.datatype.from_bytes(&data[e.offset..e.offset+e.size])?));
+            reprs.push(format!("{}: {}",e.name, e.datatype.bytes_to_string(&data[e.offset..e.offset+e.size])?));
         }
 
         let s = format!("{} {{ {} }}", self.get_name(), reprs.join(", "));
@@ -428,7 +428,7 @@ impl DataType for PointerDataType {
         format!("Pointer to {}", self.pointed_datatype.get_name())
     }
 
-    fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
+    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()> {
         if data.len() != self.get_size() {
             return Err(());
         }
@@ -453,7 +453,7 @@ impl DataType for ArrayDataType {
         format!("Array of {}", self.element_datatype.get_name())
     }
 
-    fn from_bytes(&self, data: &[u8]) -> Result<String, ()> {
+    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()> {
         if data.len() != self.get_size() {
             return Err(());
         }
@@ -478,7 +478,7 @@ mod test {
         let data = [0; 4];
 
         assert_eq!(dt.get_size(), 4);
-        let val = dt.from_bytes(&data).unwrap();
+        let val = dt.bytes_to_string(&data).unwrap();
         assert_eq!(val, "false");
     }
 
@@ -491,7 +491,7 @@ mod test {
         data[2] = 5;
 
         assert_eq!(dt.get_size(), 4);
-        let val = dt.from_bytes(&data).unwrap();
+        let val = dt.bytes_to_string(&data).unwrap();
         assert_eq!(val, "true");
     }
 
@@ -508,7 +508,7 @@ mod test {
 
         assert_eq!(dt.get_size(), 1);
         assert_eq!(dt.endianness, Endianness::Big);
-        assert_eq!(dt.from_bytes(&data)?, "50");
+        assert_eq!(dt.bytes_to_string(&data)?, "50");
         Ok(())
     }
 
@@ -525,7 +525,7 @@ mod test {
 
         assert_eq!(dt.get_size(), 4);
         assert_eq!(dt.endianness, Endianness::Little);
-        assert_eq!(dt.from_bytes(&data)?, "0xDEADBEEF");
+        assert_eq!(dt.bytes_to_string(&data)?, "0xDEADBEEF");
         Ok(())
     }
 
@@ -542,7 +542,7 @@ mod test {
 
         assert_eq!(dt.get_size(), 4);
         assert_eq!(dt.endianness, Endianness::Little);
-        assert_eq!(dt.from_bytes(&data)?, "-1");
+        assert_eq!(dt.bytes_to_string(&data)?, "-1");
         Ok(())
     }
 
@@ -555,7 +555,7 @@ mod test {
 
         let data = [0x3f, 0x80, 0x00, 0x00];
         assert_eq!(dt.get_size(), 4);
-        assert_eq!(dt.from_bytes(&data)?, "1.000");
+        assert_eq!(dt.bytes_to_string(&data)?, "1.000");
         Ok(())
     }
 }
