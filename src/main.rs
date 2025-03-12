@@ -1,4 +1,8 @@
 use eframe::egui;
+use gui::load_dialog::LoadDialog;
+use gui::prompt_save_dialog::Choice;
+use gui::save_dialog::SaveDialog;
+use gui::{prompt_save_dialog, Dialog, DialogState};
 use serde::{Deserialize, Serialize};
 use gui::type_selection_dialog::{self, TypeSelectionDialog};
 use sysinfo::{System, RefreshKind, ProcessRefreshKind};
@@ -41,26 +45,26 @@ struct MyEguiApp {
     selected_process: Option<Process>,
     state: State,
 
-    // dialogs
-    process_dialog: Option<ProcessDialog>,
-    type_selection_dialog: Option<TypeSelectionDialog>,
-    closing_dialog: bool,
-    file_dialog: Option<egui_file_dialog::FileDialog>,
-    save_load_dialog: bool,
-    
     // file saving
     save_file_location: Option<PathBuf>,
     is_dirty: bool,
 }
+#[derive(Debug, Clone, Copy)]
+enum SaveType {
+    Normal,
+    Load,
+    Quit
+}
 
-#[derive(Debug, Copy, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Default)]
 enum State {
     #[default]
     Normal,
-    Load,
-    SaveAndLoad,
-    Save,
-    SaveAndQuit,
+    ProcessSelection(gui::process_dialog::ProcessDialog),
+    PromptForSave(gui::prompt_save_dialog::PromptSaveDialog, SaveType),
+    Load(gui::load_dialog::LoadDialog),
+    Save(gui::save_dialog::SaveDialog, SaveType),
+    TypeSelection(TypeSelectionDialog),
     Quit,
 }
 
@@ -122,258 +126,186 @@ impl MyEguiApp {
 
 impl eframe::App for MyEguiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Close if not in file dialog, and if not dirty
+        // Handle close requests
         let close_requested = ctx.input(|i| i.viewport().close_requested());
         if close_requested {
             match self.state {
-                State::Save | State::SaveAndQuit | State::Load | State::SaveAndLoad => {
+                State::Save(_,_) | State::PromptForSave(_,_) | State::Load(_) => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                }
-                State::Normal => if self.is_dirty {
-                    self.closing_dialog = true;
+                },
+                State::Quit => {},
+                _ => if self.is_dirty {
                     ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                }
-                _ => {}
-            }
-        }
-
-        /* DIALOGS */
-
-        if self.closing_dialog {
-            egui::Modal::new("close_unsaved_dialog".into()).show(ctx, 
-            |ui| {
-                ui.heading("You have unsaved changes");
-                ui.horizontal(|ui| {
-                    if ui.button("Quit w/o saving").clicked() {
-                        self.closing_dialog = false;
-                        self.quit(ctx);
-                    }
-                    if ui.button("Save & Quit").clicked() {
-                        self.state = State::SaveAndQuit;
-                        self.closing_dialog = false;
-                    }
-                    if ui.button("Cancel").clicked() {
-                        self.closing_dialog = false;
-                    }
-                })
-            });
-        }
-
-        // Handle save requests
-        if self.state == State::SaveAndQuit || self.state == State::Save || self.state == State::SaveAndLoad {
-            //Are the changes saved ?
-            if self.is_dirty {
-                if self.save_file_location.is_some() {
-                    match MyEguiApp::save_to_file(self) {
-                        Ok(()) => {
-                            self.is_dirty = false;
-                            if self.state == State::SaveAndQuit {
-                                self.quit(ctx);
-                            } else if self.state == State::SaveAndLoad {
-                                self.state = State::Load;
-                            }
-                        }
-                        Err(e) => {
-                            println!("ERROR: Could not save: {}",e);
-                            self.state = State::Normal;
-                        }
-                    }
-                } else {
-                    if let Some(fd) = self.file_dialog.as_mut() {
-                        use egui_file_dialog::DialogState::*;
-                        match fd.state() {
-                            Open => {fd.update(ctx);},
-                            Closed | Cancelled => {
-                                println!("User did not choose save file, saving is cancelled");
-                                self.state = State::Normal;
-                                self.file_dialog = None;
-                            },
-                            Picked(_p) => {
-                                self.save_file_location = fd.take_picked().map(|p| p.to_path_buf());
-                                self.file_dialog = None;
-                            },
-                            PickedMultiple(_) => unreachable!()
-                        }
-                    } else {
-                        let mut fd: egui_file_dialog::FileDialog = egui_file_dialog::FileDialog::new();
-                        fd.config_mut().default_file_name = self
-                                .selected_process
-                                .as_ref()
-                                .and_then(|p| self.system.process(p.pid()))
-                                .and_then(|p| p.name().to_str())
-                                .map(|s| PathBuf::from(s))
-                                .and_then(|path| path.with_extension("rsclass").to_str().map(ToOwned::to_owned))
-                                .unwrap_or("new_project.rsclass".into());
-
-                        if let Some(p) = dirs::document_dir() {
-                            fd.config_mut().initial_directory = p;
-                        }
-                        fd.save_file();
-                        self.file_dialog = Some(fd);
-                    }
-                }
-            } else {
-                if self.state == State::SaveAndQuit {
-                    self.quit(ctx);
-                } else {
-                    self.state = State::Normal;
                 }
             }
         }
 
-        if self.save_load_dialog {
-            egui::Modal::new("save_load_dialog".into()).show(ctx, 
-            |ui| {
-                ui.heading("Do you wish to save your changes ?");
-                ui.horizontal(|ui| {
-                    if ui.button("Discard changes").clicked() {
-                        self.save_load_dialog = false;
-                        // force discard changes
-                        self.is_dirty = false;
-                        self.state = State::Load;
-                    }
-                    if ui.button("Save changes").clicked() {
-                        self.state = State::SaveAndLoad;
-                        self.save_load_dialog = false;
-                    }
-                    if ui.button("Cancel").clicked() {
-                        self.save_load_dialog = false;
-                        self.state = State::Normal;
-                    }
-                })
-            });
-        }
-
-        if self.state == State::Load {
-            // The user has already opened/saved a project
-            if self.is_dirty && self.save_file_location.is_some() {
-                self.state = State::SaveAndLoad;
+        /* DIALOGS AND STATE TRANSITIONS */
+        let s_ref = &mut self.state;
+        let nstate = match s_ref {
+            State::Normal => None,
+            State::Quit => if self.is_dirty {
+                Some(State::PromptForSave(Default::default(), SaveType::Quit))
             } else {
-                if let Some(fd) = self.file_dialog.as_mut() {
-                    use egui_file_dialog::DialogState::*;
-                    match fd.state() {
-                        Open => {fd.update(ctx);},
-                        Closed | Cancelled => {
-                            println!("User did not choose a file, loading is cancelled.");
-                            self.state = State::Normal;
-                            self.file_dialog = None;
-                        },
-                        Picked(_p) => {
-                            self.save_file_location = fd.take_picked().map(|p| p.to_path_buf());
-                            match self.load_from_file() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                Some(State::Quit)
+            },
+            State::Load(ld)  => {
+                if self.is_dirty {
+                    Some(State::PromptForSave(Default::default(), SaveType::Load))
+                } else {
+                    ld.show(ctx);
+                    use gui::load_dialog::State as DialogState;
+                    match ld.state() {
+                        DialogState::Open => None,
+                        DialogState::Cancelled => Some(State::Normal),
+                        DialogState::Selected(p) => {
+                            self.save_file_location = Some(p.clone());
+                            let save_success = self.load_from_file();
+                            match save_success {
                                 Ok(()) => {
+                                    println!("Data sucessfully saved!");
                                     self.is_dirty = false;
-                                    self.file_dialog = None;
-                                    self.state = State::Normal;
-                                    println!("Loaded from file!")
-                                },
-                                Err(e) => {
-                                    println!("ERROR: Could not load: {}",e);
                                 }
-                            };
+                                Err(err_s) => {
+                                    eprintln!("ERROR: Could not save to file: {}", err_s);
+                                }
+                            }
+                            Some(State::Normal)
+                        }
+                    }
+                }
+            },
+            State::Save(dialog, save_type) => {
+                let st = *save_type;
+                if self.save_file_location.is_some() {
+                    let load_success = self.save_to_file();
+                    match load_success {
+                        Ok(()) => {
+                            println!("File successfully loaded!");
+                            self.is_dirty = false;
+                            match st {
+                                SaveType::Quit => Some(State::Quit),
+                                SaveType::Load => Some(State::Load(LoadDialog::new(self))),
+                                SaveType::Normal => Some(State::Normal),
+                            }
                         },
-                        PickedMultiple(_) => unreachable!()
+                        Err(err_s) => {
+                            eprintln!("ERROR: Could not load from file: {}", err_s);
+                            Some(State::Normal)
+                        }
                     }
                 } else {
-                    let mut fd: egui_file_dialog::FileDialog = egui_file_dialog::FileDialog::new()
-                        .add_file_filter("rsclass", Arc::new(|path| path.extension().map(|ext| ext == "rsclass").unwrap_or_default()))
-                        .default_file_filter("rsclass");
-                    if let Some(file_name) = self
-                        .selected_process
-                        .as_ref()
-                        .and_then(|p| self.system.process(p.pid()))
-                        .and_then(|p| p.name().to_str())
-                        .map(|s| PathBuf::from(s))
-                        .and_then(|path| path.with_extension("rsclass").to_str().map(ToOwned::to_owned))
-                    {
-                        fd.config_mut().default_file_name = file_name;
+                    dialog.show(ctx);
+                    use gui::save_dialog::State as DialogState;
+                    match dialog.state() {
+                        DialogState::Open => None,
+                        DialogState::Cancelled => Some(State::Normal),
+                        DialogState::Selected(p) => {
+                            self.save_file_location = Some(p.clone());
+                            None
+                            // let load_success = self.save_to_file();
+                            // match load_success {
+                            //     Ok(()) => {
+                            //         println!("File successfully loaded!");
+                            //         self.is_dirty = false;
+                            //         match st {
+                            //             SaveType::Quit => Some(State::Quit),
+                            //             SaveType::Load => Some(State::Load(LoadDialog::new(self))),
+                            //             SaveType::Normal => Some(State::Normal),
+                            //         }
+                            //     },
+                            //     Err(err_s) => {
+                            //         eprintln!("ERROR: Could not load from file: {}", err_s);
+                            //         Some(State::Normal)
+                            //     }
+                            // }
+                        }
                     }
-                        
-                    if let Some(p) = dirs::document_dir() {
-                        fd.config_mut().initial_directory = p;
+                }
+            },
+            State::PromptForSave(dialog, save_type) => {
+                dialog.show(ctx);
+                use gui::prompt_save_dialog::State as DialogState;
+                match dialog.state() {
+                    DialogState::Open => None,
+                    DialogState::Cancelled => Some(State::Normal),
+                    DialogState::Selected(Choice::Save) => {
+                        let st = *save_type;
+                        Some(State::Save(SaveDialog::new(self), st))
+                    },
+                    DialogState::Selected(Choice::Discard) => match save_type {
+                            SaveType::Quit => Some(State::Quit),
+                            SaveType::Load => Some(State::Load(LoadDialog::new(self))),
+                            SaveType::Normal => Some(State::Normal),
+                        }
+                }
+            }
+            State::ProcessSelection(dialog) => {
+                dialog.show(ctx);
+                use gui::process_dialog::State as DialogState;
+                match dialog.state() {
+                    DialogState::Open => None,
+                    DialogState::Selected(pid) => {
+                        self.selected_process = Some(Process::new(pid.clone()));
+                        Some(State::Normal)
                     }
-                    fd.pick_file();
-                    self.file_dialog = Some(fd);
+                    DialogState::Cancelled => Some(State::Normal)
                 }
-            }
-        }
+            },
+            State::TypeSelection(dialog) => {
+                dialog.show(ctx);
+                use type_selection_dialog::State as DialogState;
+                match dialog.state() {
+                    DialogState::Open => None,
+                    DialogState::Selected(data) => {
+                        self.selected_type = Some(data.to_owned());
+                        Some(State::Normal)
+                    },
+                    DialogState::Cancelled => {
+                        Some(State::Normal)
+                    }
+                }
+            },
+        };
 
-        // Process Selection Window
-        if let Some(pd) = self.process_dialog.as_mut() {
-            pd.show(ctx);
-            match pd.state() {
-                PDState::Closed => self.process_dialog = None,
-                PDState::Selected(pid) => {
-                    self.selected_process = Some(Process::new(pid));
-                    self.process_dialog = None;
-                }
-                _ => {}
-            }
-        }
-
-        // Type Selection Window
-        if let Some(dialog) = self.type_selection_dialog.as_mut() {
-            dialog.show(ctx);
-            use type_selection_dialog::State;
-            match dialog.state() {
-                State::Closed => self.type_selection_dialog = None,
-                State::Selected(data) => {
-                    self.selected_type = Some(data.to_owned());
-                    self.type_selection_dialog = None;
-                }
-                _ => {}
-            }
+        if let Some(s) = nstate {
+            self.state = s;
         }
 
         /* GUI INTERFACE */
         egui::TopBottomPanel::top("menu").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("open process").clicked() {
-                    let mut dialog = ProcessDialog::new();
-                    dialog.open();
-                    self.process_dialog = Some(dialog);
+                    let dialog = ProcessDialog::default();
+                    self.state = State::ProcessSelection(dialog);
                 };
                 if ui.button("load").clicked() {
-                    self.state = State::Load;
+                    self.state = State::Load(LoadDialog::new(self));
                 };
                 let save_button = egui::Button::new("save");
                 if ui.add_enabled(self.is_dirty, save_button).clicked() {
-                    self.state = State::Save;
+                    self.state = State::Save(SaveDialog::new(self), SaveType::Normal);
                 };
                 if ui.button("type").clicked() {
-                    self.type_selection_dialog = Some(TypeSelectionDialog::new(self.typedefs.clone()));
+                    let dialog = TypeSelectionDialog::new(self.typedefs.clone());
+                    self.state = State::TypeSelection(dialog);
                 }
             });
         });
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Hello World!");
+            ui.heading("General Data");
             ui.label(format!("App state: {:?}", self.state));
+            ui.label(format!("Selected process: {}", self.selected_process.as_ref().and_then(|p| self.system.process(p.pid())).and_then(|p| p.name().to_str()).unwrap_or("None")));
             ui.add_space(10.0);
 
             ui.heading("File saving");
             ui.label(format!("Dirty? {}", self.is_dirty));
             ui.label(format!("File location: {:?}", self.save_file_location));
-            ui.label(format!("File Dialog: {:?}", self.file_dialog.as_ref().map(|fd| fd.state())));
-            ui.add_space(10.0);
-
-            ui.heading("Process Dialog");
-            ui.label(format!("Selected process: {}", self.selected_process.as_ref().and_then(|p| self.system.process(p.pid())).and_then(|p| p.name().to_str()).unwrap_or("None")));
-            let pstatus = self.process_dialog.as_ref().map(|pd| pd.state());
-            ui.label(format!("Process window status: {:?}", pstatus));
             ui.add_space(10.0);
 
             ui.heading("Type Selection Dialog");
             ui.label(format!("Selected type : {:?}", self.selected_type));
-            ui.label(format!("dialog state : {:?}", self.type_selection_dialog.as_ref().map(|tsd| tsd.state())));
-
-            if let Some(PDState::Selected(pid)) = pstatus {
-                self.system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
-                if let Some(p) = self.system.process(pid) {
-                    
-                } else {
-                    self.selected_process = None
-                }
-            }
         });
     }
 }
