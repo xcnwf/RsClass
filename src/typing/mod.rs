@@ -1,6 +1,16 @@
+pub mod bool;
+pub use bool::BooleanDataType;
+pub mod int;
+pub use int::{IntSize, IntegerDataType};
+pub mod float;
+pub use float::{FloatDataType, FloatPrecision};
+pub mod str;
+pub use str::StrDataType;
+pub mod struct_dt;
+pub use struct_dt::{StructDataType, StructEntry};
+
 use std::fmt::Display;
 
-use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
 
@@ -94,363 +104,6 @@ pub enum DataTypeEnum {
 }
 
 /* BOOLEANS */
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BooleanDataType {
-    size: usize,
-}
-impl Default for BooleanDataType {
-    fn default() -> Self {
-        BooleanDataType { size: 1 }
-    }
-}
-impl DataType for BooleanDataType {
-    fn get_size(&self) -> usize {
-        self.size
-    }
-    fn get_name(&self) -> String {
-        "Boolean".into()
-    }
-    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ConversionError> {
-        if data.len() != self.size {
-            return Err(ConversionError::SizeError);
-        }
-
-        let mut b = false;
-        for &x in &data[0..self.get_size()] {
-            b |= x != 0u8;
-        }
-        Ok((b).to_string())
-    }
-}
-impl BooleanDataType {
-    pub fn set_size(&mut self, size: usize) {
-        self.size = size;
-    }
-    pub fn with_size(mut self, size: usize) -> Self {
-        self.set_size(size);
-        self
-    }
-}
-
-/* INTEGERS */
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Serialize, Deserialize)]
-pub enum IntSize {
-    Integer8,
-    Integer16,
-    #[default]
-    Integer32,
-    Integer64,
-}
-impl From<IntSize> for usize {
-    fn from(val: IntSize) -> Self {
-        use IntSize::{Integer16, Integer32, Integer64, Integer8};
-        match val {
-            Integer8 => 1,
-            Integer16 => 2,
-            Integer32 => 4,
-            Integer64 => 8,
-        }
-    }
-}
-impl TryFrom<usize> for IntSize {
-    type Error = &'static str;
-    fn try_from(value: usize) -> Result<Self, Self::Error> {
-        use IntSize::{Integer16, Integer32, Integer64, Integer8};
-        match value {
-            1 => Ok(Integer8),
-            2 => Ok(Integer16),
-            4 => Ok(Integer32),
-            8 => Ok(Integer64),
-            _ => Err("That size is not valid, can only be powers of 2 between 1 and 8."),
-        }
-    }
-}
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct IntegerDataType {
-    size: IntSize,
-    signed: bool,
-    hex: bool,
-    endianness: Endianness,
-}
-impl Default for IntegerDataType {
-    fn default() -> Self {
-        IntegerDataType {
-            size: IntSize::Integer32,
-            signed: false,
-            hex: false,
-            endianness: Endianness::Little,
-        }
-    }
-}
-impl DataType for IntegerDataType {
-    fn get_size(&self) -> usize {
-        self.size.into()
-    }
-    fn get_name(&self) -> String {
-        "Integer".into()
-    }
-
-    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ConversionError> {
-        if data.len() != self.get_size() {
-            return Err(ConversionError::SizeError);
-        };
-        let val = match self.size {
-            IntSize::Integer8 => u64::from(data[0]),
-            _ => match self.endianness {
-                Endianness::Little => LittleEndian::read_uint(data, self.get_size()),
-                Endianness::Big => BigEndian::read_uint(data, self.get_size()),
-            },
-        };
-
-        let s = match (self.hex, self.signed) {
-            (true, _) => format!("{val:#X}"),
-            (false, true) => {
-                let p = 8 * self.get_size();
-                let mut signed_val = val;
-                if (val >> (p - 1)) == 1 {
-                    signed_val |= u64::MAX ^ ((1 << p) - 1);
-                }
-                format!("{}", signed_val as i64)
-            }
-            (false, false) => format!("{val}"),
-        };
-        Ok(s)
-    }
-}
-impl IntegerDataType {
-    pub fn set_hex(&mut self, hex: bool) {
-        self.hex = hex;
-    }
-    pub fn toggle_hex(&mut self) {
-        self.set_hex(!self.hex);
-    }
-    pub fn with_hex(mut self, hex: bool) -> Self {
-        self.set_hex(hex);
-        self
-    }
-
-    pub fn set_signed(&mut self, signed: bool) {
-        self.signed = signed;
-    }
-    pub fn toggle_signed(&mut self) {
-        self.set_signed(!self.signed);
-    }
-    pub fn with_signed(mut self, signed: bool) -> Self {
-        self.set_signed(signed);
-        self
-    }
-
-    pub fn set_endianness(&mut self, endianness: Endianness) {
-        self.endianness = endianness;
-    }
-    pub fn toggle_endianness(&mut self) {
-        self.set_endianness(self.endianness.toggle());
-    }
-    pub fn with_endianness(mut self, endianness: Endianness) -> Self {
-        self.set_endianness(endianness);
-        self
-    }
-
-    pub fn set_size(&mut self, size: IntSize) {
-        self.size = size;
-    }
-    pub fn with_size(mut self, size: IntSize) -> Self {
-        self.set_size(size);
-        self
-    }
-}
-
-/* FLOATS */
-#[derive(Clone, Copy, PartialEq, PartialOrd, Debug, Default, Serialize, Deserialize)]
-pub enum FloatPrecision {
-    #[default]
-    Simple,
-    Double,
-}
-impl FloatPrecision {
-    pub fn toggle(&self) -> Self {
-        use FloatPrecision::{Double, Simple};
-        match self {
-            Simple => Double,
-            Double => Simple,
-        }
-    }
-}
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct FloatDataType {
-    endianness: Endianness,
-    precision: FloatPrecision,
-}
-impl DataType for FloatDataType {
-    fn get_size(&self) -> usize {
-        use FloatPrecision::{Double, Simple};
-        match self.precision {
-            Simple => 4,
-            Double => 8,
-        }
-    }
-    fn get_name(&self) -> String {
-        "Float".into()
-    }
-    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ConversionError> {
-        if data.len() != self.get_size() {
-            return Err(ConversionError::SizeError);
-        }
-
-        use Endianness::{Big, Little};
-        match self.precision {
-            FloatPrecision::Simple => {
-                let val = match self.endianness {
-                    Big => BigEndian::read_f32(data),
-                    Little => LittleEndian::read_f32(data),
-                };
-                Ok(format!("{val:.3}"))
-            }
-            FloatPrecision::Double => {
-                let val = match self.endianness {
-                    Big => BigEndian::read_f64(data),
-                    Little => LittleEndian::read_f64(data),
-                };
-                Ok(format!("{val:.3}"))
-            }
-        }
-    }
-}
-impl FloatDataType {
-    pub fn set_precision(&mut self, precision: FloatPrecision) {
-        self.precision = precision;
-    }
-    pub fn toggle_precision(&mut self) {
-        self.set_precision(self.precision.toggle());
-    }
-    pub fn with_precision(mut self, precision: FloatPrecision) -> Self {
-        self.set_precision(precision);
-        self
-    }
-
-    pub fn set_endianness(&mut self, endianness: Endianness) {
-        self.endianness = endianness;
-    }
-    pub fn toggle_endianness(&mut self) {
-        self.set_endianness(self.endianness.toggle());
-    }
-    pub fn with_endianness(mut self, endianness: Endianness) -> Self {
-        self.set_endianness(endianness);
-        self
-    }
-}
-
-/* STRINGS */
-#[derive(Clone, Default, Debug, Serialize, Deserialize)]
-pub struct StrDataType {
-    size: usize,
-}
-impl DataType for StrDataType {
-    fn get_size(&self) -> usize {
-        self.size
-    }
-
-    fn get_name(&self) -> String {
-        String::from("Null terminated string")
-    }
-
-    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ConversionError> {
-        if data.len() != self.get_size() {
-            return Err(ConversionError::SizeError);
-        }
-
-        let cstr = std::ffi::CStr::from_bytes_until_nul(data)
-            .map_err(|_e| ConversionError::CStrUntilNullError)?;
-        Ok(cstr.to_string_lossy().into_owned())
-    }
-}
-impl StrDataType {
-    pub fn set_size(&mut self, size: usize) {
-        self.size = size;
-    }
-    pub fn with_size(mut self, size: usize) -> Self {
-        self.set_size(size);
-        self
-    }
-}
-
-/* STRUCTS */
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StructDataType {
-    name: String,
-    entries: Vec<StructEntry>,
-}
-impl Default for StructDataType {
-    fn default() -> Self {
-        Self {
-            name: "STRUCT".into(),
-            entries: Vec::new(),
-        }
-    }
-}
-impl DataType for StructDataType {
-    fn get_size(&self) -> usize {
-        self.entries.iter().map(|e| e.size).sum()
-    }
-    fn get_name(&self) -> String {
-        self.name.clone()
-    }
-    fn bytes_to_string(&self, _data: &[u8]) -> Result<String, ConversionError> {
-        Err(ConversionError::NotConvertibleError)
-    }
-}
-impl StructDataType {
-    pub fn new(name: String, entries: Vec<StructEntry>) -> Self {
-        StructDataType { name, entries }
-    }
-    pub fn get_entries(&self) -> &Vec<StructEntry> {
-        &self.entries
-    }
-    pub fn push_entry(&mut self, mut e: StructEntry) {
-        e.offset = self
-            .entries
-            .last()
-            .map_or(0, |e| e.offset + e.datatype.get_size());
-        self.entries.push(e);
-    }
-    pub fn insert_entry(&mut self, _idx: usize, _e: StructEntry) {
-        todo!("Insert entry")
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StructEntry {
-    name: String,
-    size: usize,
-    offset: usize,
-    datatype: DataTypeEnum,
-}
-impl StructEntry {
-    pub fn new(name: String, datatype: DataTypeEnum) -> Self {
-        Self {
-            name,
-            size: datatype.get_size(),
-            offset: 0usize,
-            datatype,
-        }
-    }
-    pub fn set_name(&mut self, name: String) {
-        self.name = name;
-    }
-    pub fn get_name(&self) -> &String {
-        &self.name
-    }
-    pub fn get_datatype(&self) -> &DataTypeEnum {
-        &self.datatype
-    }
-    pub fn set_dataype(&mut self, datatype: DataTypeEnum) {
-        self.size = datatype.get_size();
-        self.datatype = datatype;
-    }
-    pub fn get_size(&self) -> usize {
-        self.size
-    }
-}
 
 /* POINTER */
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -504,7 +157,7 @@ mod test {
 
     #[test]
     fn test_boolean_zero() {
-        let dt = BooleanDataType { size: 4 };
+        let dt = BooleanDataType::default().with_size(4);
         let data = [0; 4];
 
         assert_eq!(dt.get_size(), 4);
@@ -514,7 +167,7 @@ mod test {
 
     #[test]
     fn test_boolean_not_zero() {
-        let dt = BooleanDataType { size: 4 };
+        let dt = BooleanDataType::default().with_size(4);
         let mut data = [0; 4];
         data[2] = 5;
 
@@ -525,34 +178,30 @@ mod test {
 
     #[test]
     fn u8() -> Result<(), ()> {
-        let dt = IntegerDataType {
-            size: IntSize::Integer8,
-            signed: false,
-            hex: false,
-            endianness: Endianness::Big,
-        };
+        let dt = IntegerDataType::default()
+            .with_size(IntSize::Integer8)
+            .with_signed(false)
+            .with_hex(false)
+            .with_endianness(Endianness::Big);
 
         let data = [50; 1];
 
         assert_eq!(dt.get_size(), 1);
-        assert_eq!(dt.endianness, Endianness::Big);
         assert_eq!(dt.bytes_to_string(&data).expect("Should succeed"), "50");
         Ok(())
     }
 
     #[test]
     fn h32() -> Result<(), ()> {
-        let dt = IntegerDataType {
-            size: IntSize::Integer32,
-            signed: true,
-            hex: true,
-            endianness: Endianness::Little,
-        };
+        let dt = IntegerDataType::default()
+            .with_size(IntSize::Integer32)
+            .with_signed(true)
+            .with_hex(true)
+            .with_endianness(Endianness::Little);
 
         let data = [0xEF, 0xBE, 0xAD, 0xDE];
 
         assert_eq!(dt.get_size(), 4);
-        assert_eq!(dt.endianness, Endianness::Little);
         assert_eq!(
             dt.bytes_to_string(&data).expect("Should succeed"),
             "0xDEADBEEF"
@@ -562,27 +211,24 @@ mod test {
 
     #[test]
     fn i32_minus_one() -> Result<(), ()> {
-        let dt = IntegerDataType {
-            size: IntSize::Integer32,
-            signed: true,
-            hex: false,
-            endianness: Endianness::Little,
-        };
+        let dt = IntegerDataType::default()
+            .with_size(IntSize::Integer32)
+            .with_signed(true)
+            .with_hex(false)
+            .with_endianness(Endianness::Little);
 
         let data = [0xFF, 0xFF, 0xFF, 0xFF];
 
         assert_eq!(dt.get_size(), 4);
-        assert_eq!(dt.endianness, Endianness::Little);
         assert_eq!(dt.bytes_to_string(&data).expect("Should succeed"), "-1");
         Ok(())
     }
 
     #[test]
     fn double() -> Result<(), ()> {
-        let dt = FloatDataType {
-            precision: FloatPrecision::Simple,
-            endianness: Endianness::Big,
-        };
+        let dt = FloatDataType::default()
+            .with_precision(FloatPrecision::Simple)
+            .with_endianness(Endianness::Big);
 
         let data = [0x3f, 0x80, 0x00, 0x00];
         assert_eq!(dt.get_size(), 4);
