@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use serde::{Serialize, Deserialize};
 use enum_dispatch::enum_dispatch;
@@ -38,11 +40,33 @@ impl Endianness {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ConversionError {
+    SizeError,
+    CStrUntilNullError,
+    NotConvertibleError,
+}
+
+impl Display for ConversionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let txt = match self {
+            ConversionError::SizeError => "Provided size does not match with the size of the datatype.",
+            ConversionError::CStrUntilNullError => "The data does not contain a null terminating byte.",
+            ConversionError::NotConvertibleError => "This datatype cannot be converted to string.",
+        };
+        write!(f, "{}", txt)
+    }
+}
+
+impl std::error::Error for ConversionError {
+    
+}
+
 #[enum_dispatch]
 pub trait DataType {
     fn get_size(&self) -> usize;
     fn get_name(&self) -> String;
-    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()>;
+    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ConversionError>;
 
     fn clone_box(&self) -> Box<dyn DataType>
     where
@@ -85,9 +109,9 @@ impl DataType for BooleanDataType {
     fn get_name(&self) -> String {
         "Boolean".into()
     }
-    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()> {
+    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ConversionError> {
         if data.len() != self.size {
-            return Err(());
+            return Err(ConversionError::SizeError);
         }
 
         let mut b = false;
@@ -160,18 +184,17 @@ impl DataType for IntegerDataType {
         "Integer".into()
     }
 
-    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()> {
+    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ConversionError> {
         if data.len() != self.get_size() {
-            return Err(());
+            return Err(ConversionError::SizeError);
         };
-        let val = match self.get_size() {
-            1 => Ok(u64::from(data[0])),
-            2..=8 => match self.endianness {
-                Endianness::Little => Ok(LittleEndian::read_uint(data, self.get_size())),
-                Endianness::Big => Ok(BigEndian::read_uint(data, self.get_size())),
+        let val = match self.size {
+            IntSize::Integer8 => u64::from(data[0]),
+            _ => match self.endianness {
+                Endianness::Little => LittleEndian::read_uint(data, self.get_size()),
+                Endianness::Big => BigEndian::read_uint(data, self.get_size()),
             },
-            _ => Err(()),
-        }?;
+        };
 
         let s = match (self.hex, self.signed) {
             (true, _) => format!("{val:#X}"),
@@ -263,9 +286,9 @@ impl DataType for FloatDataType {
     fn get_name(&self) -> String {
         "Float".into()
     }
-    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()> {
+    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ConversionError> {
         if data.len() != self.get_size() {
-            return Err(());
+            return Err(ConversionError::SizeError);
         }
 
         use Endianness::{Big, Little};
@@ -325,13 +348,13 @@ impl DataType for StrDataType {
         String::from("Null terminated string")
     }
 
-    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()> {
+    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ConversionError> {
         if data.len() != self.get_size() {
-            return Err(());
+            return Err(ConversionError::SizeError);
         }
 
-        let cstr = std::ffi::CStr::from_bytes_until_nul(data).map_err(|_| ())?;
-        cstr.to_owned().into_string().map_err(|_| ())
+        let cstr = std::ffi::CStr::from_bytes_until_nul(data).map_err(|_e| ConversionError::CStrUntilNullError)?;
+        Ok(cstr.to_string_lossy().into_owned())
     }
 }
 impl StrDataType {
@@ -362,19 +385,8 @@ impl DataType for StructDataType {
     fn get_name(&self) -> String {
         self.name.clone()
     }
-    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()> {
-        if data.len() != self.get_size() {
-            return Err(());
-        }
-
-        let mut reprs = Vec::new();
-        for e in &self.entries {
-            reprs.push(format!("{}: {}",e.name, e.datatype.bytes_to_string(&data[e.offset..e.offset+e.size])?));
-        }
-
-        let s = format!("{} {{ {} }}", self.get_name(), reprs.join(", "));
-
-        Ok(s)
+    fn bytes_to_string(&self, _data: &[u8]) -> Result<String, ConversionError> {
+        Err(ConversionError::NotConvertibleError)
     }
 }
 impl StructDataType {
@@ -428,13 +440,8 @@ impl DataType for PointerDataType {
         format!("Pointer to {}", self.pointed_datatype.get_name())
     }
 
-    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()> {
-        if data.len() != self.get_size() {
-            return Err(());
-        }
-
-        let cstr = std::ffi::CStr::from_bytes_until_nul(data).map_err(|_| ())?;
-        cstr.to_owned().into_string().map_err(|_| ())
+    fn bytes_to_string(&self, _data: &[u8]) -> Result<String, ConversionError> {
+        Err(ConversionError::NotConvertibleError)
     }
 }
 
@@ -453,13 +460,12 @@ impl DataType for ArrayDataType {
         format!("Array of {}", self.element_datatype.get_name())
     }
 
-    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ()> {
+    fn bytes_to_string(&self, data: &[u8]) -> Result<String, ConversionError> {
         if data.len() != self.get_size() {
-            return Err(());
+            return Err(ConversionError::SizeError);
         }
 
-        let cstr = std::ffi::CStr::from_bytes_until_nul(data).map_err(|_| ())?;
-        cstr.to_owned().into_string().map_err(|_| ())
+        todo!();
     }
 }
 
@@ -508,7 +514,7 @@ mod test {
 
         assert_eq!(dt.get_size(), 1);
         assert_eq!(dt.endianness, Endianness::Big);
-        assert_eq!(dt.bytes_to_string(&data)?, "50");
+        assert_eq!(dt.bytes_to_string(&data).expect("Should succeed"), "50");
         Ok(())
     }
 
@@ -525,7 +531,7 @@ mod test {
 
         assert_eq!(dt.get_size(), 4);
         assert_eq!(dt.endianness, Endianness::Little);
-        assert_eq!(dt.bytes_to_string(&data)?, "0xDEADBEEF");
+        assert_eq!(dt.bytes_to_string(&data).expect("Should succeed"), "0xDEADBEEF");
         Ok(())
     }
 
@@ -542,7 +548,7 @@ mod test {
 
         assert_eq!(dt.get_size(), 4);
         assert_eq!(dt.endianness, Endianness::Little);
-        assert_eq!(dt.bytes_to_string(&data)?, "-1");
+        assert_eq!(dt.bytes_to_string(&data).expect("Should succeed"), "-1");
         Ok(())
     }
 
@@ -555,7 +561,7 @@ mod test {
 
         let data = [0x3f, 0x80, 0x00, 0x00];
         assert_eq!(dt.get_size(), 4);
-        assert_eq!(dt.bytes_to_string(&data)?, "1.000");
+        assert_eq!(dt.bytes_to_string(&data).expect("Should succeed"), "1.000");
         Ok(())
     }
 }
