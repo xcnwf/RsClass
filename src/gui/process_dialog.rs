@@ -1,7 +1,7 @@
 /***
  * Process selection dialog
  * Inspired by egui_file
- * 
+ *
 */
 
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
@@ -13,7 +13,7 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate::All, RefreshKind, Syst
  * From ReClassEx : https://github.com/ajkhoury/ReClassEx/blob/master/ReClass/DialogProcSelect.cpp
  */
 lazy_static::lazy_static! {
-    static ref common_processes : HashSet<&'static str> = 
+    static ref common_processes : HashSet<&'static str> =
     [
         "svchost.exe", "System", "conhost.exe", "wininit.exe", "smss.exe", "winint.exe", "wlanext.exe", "Code.exe", "taskhostw.exe", "SearchIndexer.exe", "Idle", "SearchApp.exe", "dllhost.exe",
         "spoolsv.exe", "spoolsv.exe", "notepad.exe", "explorer.exe", "itunes.exe",
@@ -46,13 +46,12 @@ impl Default for ProcessDialog {
     fn default() -> Self {
         Self {
             state: Default::default(),
-            system: System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::everything())),
-            selected_process_id: None
+            system: System::new_with_specifics(
+                RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+            ),
+            selected_process_id: None,
         }
     }
-
-    
-    
 }
 
 impl ProcessDialog {
@@ -62,9 +61,12 @@ impl ProcessDialog {
 
     fn ui(&mut self, ctx: &egui::Context, is_open: &mut bool) {
         let window = egui::Modal::new("Process Selection Window".into());
-        if window.show(ctx, |ui| {
-            self.ui_in_window(ui);
-        }).should_close(){
+        if window
+            .show(ctx, |ui| {
+                self.ui_in_window(ui);
+            })
+            .should_close()
+        {
             *is_open = false;
         }
     }
@@ -74,30 +76,35 @@ impl ProcessDialog {
         let viewport_rect = ui.input(|is| is.viewport().inner_rect);
 
         egui::ScrollArea::vertical()
-            .max_height(viewport_rect.map_or(f32::MAX, |r| r.height()/2.0))
-            .show(ui, |ui | {
-            
-            for (pid, process) in self.system.processes() {
-                if common_processes.contains(&process.name().to_str().unwrap_or_default()) {
-                    continue
+            .max_height(viewport_rect.map_or(f32::MAX, |r| r.height() / 2.0))
+            .show(ui, |ui| {
+                for (pid, process) in self.system.processes() {
+                    if common_processes.contains(&process.name().to_str().unwrap_or_default()) {
+                        continue;
+                    }
+                    let label_response = ui.selectable_value(
+                        &mut self.selected_process_id,
+                        Some(*pid),
+                        RichText::new(format!(
+                            "{:>6} | {}",
+                            pid.as_u32(),
+                            process.name().to_str().unwrap_or_default()
+                        ))
+                        .monospace(),
+                    );
+                    if label_response.double_clicked() {
+                        self.state = State::Selected(pid.to_owned());
+                    }
                 }
-                let label_response = ui.selectable_value(
-                    &mut self.selected_process_id,
-                    Some(*pid), 
-                    RichText::new(format!("{:>6} | {}", pid.as_u32(), process.name().to_str().unwrap_or_default())).monospace()
-                );
-                if label_response.double_clicked() {
-                    self.state = State::Selected(pid.to_owned());
-                }
-            }
-        });
-        
+            });
+
         ui.add_space(10.0);
 
         let shared_self = Rc::new(RefCell::new(self));
         let shared_self_clone = shared_self.clone();
 
-        egui::Sides::new().show(ui, 
+        egui::Sides::new().show(
+            ui,
             |ui| {
                 if ui.button("Refresh").clicked() {
                     shared_self.borrow_mut().refresh();
@@ -107,7 +114,10 @@ impl ProcessDialog {
                 ui.horizontal(|ui| {
                     let mut x = shared_self_clone.borrow_mut();
                     let ok_button = egui::Button::new("Ok");
-                    if ui.add_enabled(x.selected_process_id.is_some(), ok_button).clicked() {
+                    if ui
+                        .add_enabled(x.selected_process_id.is_some(), ok_button)
+                        .clicked()
+                    {
                         if let Some(pid) = x.selected_process_id {
                             x.state = State::Selected(pid);
                         }
@@ -116,7 +126,7 @@ impl ProcessDialog {
                         x.state = State::Cancelled;
                     }
                 });
-            }
+            },
         );
     }
 }
@@ -129,7 +139,7 @@ impl super::Dialog<Pid> for ProcessDialog {
     fn show(&mut self, ctx: &egui::Context) {
         let mut is_open = true;
         self.ui(ctx, &mut is_open);
-        
+
         if !is_open && self.state == State::Open {
             self.state = State::Cancelled;
         }

@@ -1,14 +1,14 @@
-use sysinfo::Pid;
 use crate::typing::DataType;
+use sysinfo::Pid;
 
-#[cfg(target_os="windows")]
+#[cfg(target_os = "windows")]
 mod win;
-#[cfg(target_os="windows")]
+#[cfg(target_os = "windows")]
 pub use win::WinProcess as Process;
 
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 mod linux;
-#[cfg(target_os="linux")]
+#[cfg(target_os = "linux")]
 pub use linux::LinProcess as Process;
 
 pub trait SystemProcess {
@@ -18,4 +18,3 @@ pub trait SystemProcess {
     fn write_memory(&mut self, location: u64, what: Vec<u8>) -> Result<(), String>;
     fn close(&mut self);
 }
-

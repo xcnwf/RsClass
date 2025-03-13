@@ -1,26 +1,37 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
-use sysinfo::{System, RefreshKind, ProcessRefreshKind};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
+use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 
-use rs_class::{typing::{BooleanDataType, DataTypeEnum, FloatDataType, FloatPrecision, IntSize, IntegerDataType, StrDataType, StructDataType}, ops::{Process, SystemProcess}};
+use rs_class::{
+    ops::{Process, SystemProcess},
+    typing::{
+        BooleanDataType, DataTypeEnum, FloatDataType, FloatPrecision, IntSize, IntegerDataType,
+        StrDataType, StructDataType,
+    },
+};
 
 mod gui;
-use gui::{Dialog, DialogState};
-use gui::process_dialog::ProcessDialog;
-use gui::type_selection_dialog::TypeSelectionDialog;
 use gui::load_dialog::LoadDialog;
-use gui::save_dialog::SaveDialog;
+use gui::process_dialog::ProcessDialog;
 use gui::prompt_save_dialog::Choice;
+use gui::save_dialog::SaveDialog;
+use gui::type_selection_dialog::TypeSelectionDialog;
+use gui::{Dialog, DialogState};
 
 fn main() {
     let native_options = eframe::NativeOptions::default();
     let window_name = format!("RsClass - {}", env!("CARGO_PKG_VERSION"));
-    eframe::run_native(&window_name, native_options, Box::new(|cc| Ok(Box::new(MyEguiApp::new(cc))))).expect("eframe should run");
+    eframe::run_native(
+        &window_name,
+        native_options,
+        Box::new(|cc| Ok(Box::new(MyEguiApp::new(cc)))),
+    )
+    .expect("eframe should run");
 }
 
 // (Description: String, dt: DataTypeEnum)
@@ -52,7 +63,7 @@ struct MyEguiApp {
 enum SaveType {
     Normal,
     Load,
-    Quit
+    Quit,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -75,20 +86,101 @@ impl MyEguiApp {
         let mut typedefs = s.typedefs.borrow_mut();
 
         // add default datatypes
-        typedefs.insert(String::from("Int"),("32-bit signed integer".into() ,IntegerDataType::default().into()));
-        typedefs.insert(String::from("UInt"),("32-bit unsiged integer".into() ,IntegerDataType::default().with_signed(false).into()));
-        typedefs.insert(String::from("DWORD"),("32-bit hexadecimal integer".into() ,IntegerDataType::default().with_hex(true).into()));
-        typedefs.insert(String::from("WORD"),("16-bit hexadecimal integer".into() ,IntegerDataType::default().with_hex(true).with_size(IntSize::Integer16).into()));
-        typedefs.insert(String::from("BYTE"),("8-bit hexadecimal integer".into() ,IntegerDataType::default().with_hex(true).with_size(IntSize::Integer8).into()));
-        typedefs.insert(String::from("Char"),("8-bit signed integer".into() ,IntegerDataType::default().with_size(IntSize::Integer8).into()));
-        typedefs.insert(String::from("UChar"),("8-bit unsigned integer".into() ,IntegerDataType::default().with_size(IntSize::Integer8).with_signed(false).into()));
-        typedefs.insert(String::from("CStr"),("Null-ternminated string".into() ,StrDataType::default().into()));
-        typedefs.insert(String::from("Bool"),("Single byte boolean".into() ,BooleanDataType::default().into()));
-        typedefs.insert(String::from("Float"),("Simple precision floating point number".into() ,FloatDataType::default().into()));
-        typedefs.insert(String::from("Double"),("Double precision floating point number".into() ,FloatDataType::default().with_precision(FloatPrecision::Double).into()));
+        typedefs.insert(
+            String::from("Int"),
+            (
+                "32-bit signed integer".into(),
+                IntegerDataType::default().into(),
+            ),
+        );
+        typedefs.insert(
+            String::from("UInt"),
+            (
+                "32-bit unsiged integer".into(),
+                IntegerDataType::default().with_signed(false).into(),
+            ),
+        );
+        typedefs.insert(
+            String::from("DWORD"),
+            (
+                "32-bit hexadecimal integer".into(),
+                IntegerDataType::default().with_hex(true).into(),
+            ),
+        );
+        typedefs.insert(
+            String::from("WORD"),
+            (
+                "16-bit hexadecimal integer".into(),
+                IntegerDataType::default()
+                    .with_hex(true)
+                    .with_size(IntSize::Integer16)
+                    .into(),
+            ),
+        );
+        typedefs.insert(
+            String::from("BYTE"),
+            (
+                "8-bit hexadecimal integer".into(),
+                IntegerDataType::default()
+                    .with_hex(true)
+                    .with_size(IntSize::Integer8)
+                    .into(),
+            ),
+        );
+        typedefs.insert(
+            String::from("Char"),
+            (
+                "8-bit signed integer".into(),
+                IntegerDataType::default()
+                    .with_size(IntSize::Integer8)
+                    .into(),
+            ),
+        );
+        typedefs.insert(
+            String::from("UChar"),
+            (
+                "8-bit unsigned integer".into(),
+                IntegerDataType::default()
+                    .with_size(IntSize::Integer8)
+                    .with_signed(false)
+                    .into(),
+            ),
+        );
+        typedefs.insert(
+            String::from("CStr"),
+            (
+                "Null-ternminated string".into(),
+                StrDataType::default().into(),
+            ),
+        );
+        typedefs.insert(
+            String::from("Bool"),
+            (
+                "Single byte boolean".into(),
+                BooleanDataType::default().into(),
+            ),
+        );
+        typedefs.insert(
+            String::from("Float"),
+            (
+                "Simple precision floating point number".into(),
+                FloatDataType::default().into(),
+            ),
+        );
+        typedefs.insert(
+            String::from("Double"),
+            (
+                "Double precision floating point number".into(),
+                FloatDataType::default()
+                    .with_precision(FloatPrecision::Double)
+                    .into(),
+            ),
+        );
         drop(typedefs);
 
-        let system = System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()));
+        let system = System::new_with_specifics(
+            RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+        );
         println!("Got {} processes.", system.processes().len());
         for (pid, p) in system.processes().iter().take(5) {
             println!("{} : {}", pid, p.name().to_str().unwrap_or_default());
@@ -98,8 +190,13 @@ impl MyEguiApp {
     }
 
     fn save_to_file(&self) -> Result<(), String> {
-        let file = std::fs::File::create(self.save_file_location.as_ref().ok_or("please select a save location")?).map_err(|e| e.to_string())?;
-        
+        let file = std::fs::File::create(
+            self.save_file_location
+                .as_ref()
+                .ok_or("please select a save location")?,
+        )
+        .map_err(|e| e.to_string())?;
+
         let td = self.typedefs.borrow();
         let data_to_save = SaveData {
             typedefs: Cow::Borrowed(&td),
@@ -111,7 +208,12 @@ impl MyEguiApp {
     }
 
     fn load_from_file(&mut self) -> Result<(), String> {
-        let file = std::fs::File::open(self.save_file_location.as_ref().ok_or("No file path for load available")?).map_err(|e| e.to_string())?;
+        let file = std::fs::File::open(
+            self.save_file_location
+                .as_ref()
+                .ok_or("No file path for load available")?,
+        )
+        .map_err(|e| e.to_string())?;
         let loaded_data: SaveData = ron::de::from_reader(file).map_err(|e| e.to_string())?;
         self.struct_tabs = loaded_data.structs.into_owned();
         self.typedefs = Rc::new(RefCell::new(loaded_data.typedefs.into_owned()));
@@ -125,12 +227,14 @@ impl eframe::App for MyEguiApp {
         let close_requested = ctx.input(|i| i.viewport().close_requested());
         if close_requested {
             match self.state {
-                AppState::Save(_,_) | AppState::PromptForSave(_,_) | AppState::Load(_) => {
+                AppState::Save(_, _) | AppState::PromptForSave(_, _) | AppState::Load(_) => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                },
-                AppState::Quit => {},
-                _ => if self.is_dirty {
-                    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                }
+                AppState::Quit => {}
+                _ => {
+                    if self.is_dirty {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                    }
                 }
             }
         }
@@ -139,13 +243,15 @@ impl eframe::App for MyEguiApp {
         let s_ref = &mut self.state;
         let nstate = match s_ref {
             AppState::Normal => None,
-            AppState::Quit => if self.is_dirty {
-                Some(AppState::PromptForSave(Default::default(), SaveType::Quit))
-            } else {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                Some(AppState::Quit)
-            },
-            AppState::Load(ld)  => {
+            AppState::Quit => {
+                if self.is_dirty {
+                    Some(AppState::PromptForSave(Default::default(), SaveType::Quit))
+                } else {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    Some(AppState::Quit)
+                }
+            }
+            AppState::Load(ld) => {
                 if self.is_dirty {
                     Some(AppState::PromptForSave(Default::default(), SaveType::Load))
                 } else {
@@ -170,7 +276,7 @@ impl eframe::App for MyEguiApp {
                         }
                     }
                 }
-            },
+            }
             AppState::Save(dialog, save_type) => {
                 let st = *save_type;
                 if self.save_file_location.is_some() {
@@ -184,7 +290,7 @@ impl eframe::App for MyEguiApp {
                                 SaveType::Load => Some(AppState::Load(LoadDialog::new(self))),
                                 SaveType::Normal => Some(AppState::Normal),
                             }
-                        },
+                        }
                         Err(err_s) => {
                             eprintln!("ERROR: Could not load from file: {err_s}");
                             Some(AppState::Normal)
@@ -217,7 +323,7 @@ impl eframe::App for MyEguiApp {
                         }
                     }
                 }
-            },
+            }
             AppState::PromptForSave(dialog, save_type) => {
                 dialog.show(ctx);
                 match dialog.state() {
@@ -226,12 +332,12 @@ impl eframe::App for MyEguiApp {
                     DialogState::Selected(Choice::Save) => {
                         let st = *save_type;
                         Some(AppState::Save(SaveDialog::new(self), st))
-                    },
+                    }
                     DialogState::Selected(Choice::Discard) => match save_type {
-                            SaveType::Quit => Some(AppState::Quit),
-                            SaveType::Load => Some(AppState::Load(LoadDialog::new(self))),
-                            SaveType::Normal => Some(AppState::Normal),
-                        }
+                        SaveType::Quit => Some(AppState::Quit),
+                        SaveType::Load => Some(AppState::Load(LoadDialog::new(self))),
+                        SaveType::Normal => Some(AppState::Normal),
+                    },
                 }
             }
             AppState::ProcessSelection(dialog) => {
@@ -242,9 +348,9 @@ impl eframe::App for MyEguiApp {
                         self.selected_process = Some(Process::new(*pid));
                         Some(AppState::Normal)
                     }
-                    DialogState::Cancelled => Some(AppState::Normal)
+                    DialogState::Cancelled => Some(AppState::Normal),
                 }
-            },
+            }
             AppState::TypeSelection(dialog) => {
                 dialog.show(ctx);
                 match dialog.state() {
@@ -252,12 +358,10 @@ impl eframe::App for MyEguiApp {
                     DialogState::Selected(data) => {
                         self.selected_type = Some(data.to_owned());
                         Some(AppState::Normal)
-                    },
-                    DialogState::Cancelled => {
-                        Some(AppState::Normal)
                     }
+                    DialogState::Cancelled => Some(AppState::Normal),
                 }
-            },
+            }
         };
 
         if let Some(s) = nstate {
@@ -287,7 +391,14 @@ impl eframe::App for MyEguiApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("General Data");
             ui.label(format!("App state: {:?}", self.state));
-            ui.label(format!("Selected process: {}", self.selected_process.as_ref().and_then(|p| self.system.process(p.pid())).and_then(|p| p.name().to_str()).unwrap_or("None")));
+            ui.label(format!(
+                "Selected process: {}",
+                self.selected_process
+                    .as_ref()
+                    .and_then(|p| self.system.process(p.pid()))
+                    .and_then(|p| p.name().to_str())
+                    .unwrap_or("None")
+            ));
             ui.add_space(10.0);
 
             ui.heading("File saving");

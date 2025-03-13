@@ -1,5 +1,5 @@
 use egui::RichText;
-use std::{rc::Rc, cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub type State = super::DialogState<String>;
 
@@ -18,7 +18,7 @@ impl TypeSelectionDialog {
             state: State::Open,
             search_string: Default::default(),
             typedefs,
-            selected_string: Default::default()
+            selected_string: Default::default(),
         }
     }
 
@@ -34,9 +34,8 @@ impl TypeSelectionDialog {
         if self.state == State::Open {
             let mut is_open = true;
             self.ui(ctx, &mut is_open);
-            
+
             if is_open {
-                
             } else {
                 self.state = State::Cancelled;
             }
@@ -48,48 +47,58 @@ impl TypeSelectionDialog {
     fn ui(&mut self, ctx: &egui::Context, is_open: &mut bool) {
         let viewport_rect = ctx.input(|is| is.viewport().inner_rect);
         let area = egui::Modal::default_area(egui::Id::new("type_selection_dialog_area"))
-            .default_size(viewport_rect.map_or(egui::vec2(f32::MAX, f32::MAX), |r|egui::vec2(r.height()*0.75, r.width()*0.75)));
+            .default_size(viewport_rect.map_or(egui::vec2(f32::MAX, f32::MAX), |r| {
+                egui::vec2(r.height() * 0.75, r.width() * 0.75)
+            }));
         let window = egui::Modal::new("Process Selection Window".into()).area(area);
-        if window.show(ctx, |ui| {
-            self.ui_in_window(ui);
-        }).should_close(){
+        if window
+            .show(ctx, |ui| {
+                self.ui_in_window(ui);
+            })
+            .should_close()
+        {
             *is_open = false;
         }
     }
 
     fn ui_in_window(&mut self, ui: &mut egui::Ui) {
         ui.heading("Select a process");
-        
 
         ui.text_edit_singleline(&mut self.search_string);
 
         egui::ScrollArea::vertical()
             //.max_height(viewport_rect.map(|r| r.height()/2.0).unwrap_or(f32::MAX))
-            .show(ui, |ui | {
-            
-            for (name,_dt) in self.typedefs.borrow().iter() {
-                if !name.to_lowercase().contains(&self.search_string.to_lowercase()) {
-                    continue
+            .show(ui, |ui| {
+                for (name, _dt) in self.typedefs.borrow().iter() {
+                    if !name
+                        .to_lowercase()
+                        .contains(&self.search_string.to_lowercase())
+                    {
+                        continue;
+                    }
+                    let label_response = ui.selectable_value(
+                        &mut self.selected_string,
+                        Some(name.clone()),
+                        RichText::new(name.to_string()),
+                    );
+                    if label_response.double_clicked() {
+                        self.state = State::Selected(name.clone());
+                    }
                 }
-                let label_response = ui.selectable_value(
-                    &mut self.selected_string,
-                    Some(name.clone()), 
-                    RichText::new(name.to_string())
-                );
-                if label_response.double_clicked() {
-                    self.state = State::Selected(name.clone());
-                }
-            }
-        });
-        
+            });
+
         ui.add_space(10.0);
 
-        egui::Sides::new().show(ui, 
+        egui::Sides::new().show(
+            ui,
             |_| {},
             |ui| {
                 ui.horizontal(|ui| {
                     let ok_button = egui::Button::new("Ok");
-                    if ui.add_enabled(self.selected_string.is_some(), ok_button).clicked() {
+                    if ui
+                        .add_enabled(self.selected_string.is_some(), ok_button)
+                        .clicked()
+                    {
                         if let Some(data) = &self.selected_string {
                             self.state = State::Selected(data.to_owned());
                         }
@@ -98,7 +107,7 @@ impl TypeSelectionDialog {
                         self.cancel();
                     }
                 });
-            }
+            },
         );
     }
 }

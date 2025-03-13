@@ -1,2 +1,2 @@
-pub mod typing;
 pub mod ops;
+pub mod typing;
