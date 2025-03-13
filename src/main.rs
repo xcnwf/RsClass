@@ -240,8 +240,7 @@ impl eframe::App for MyEguiApp {
         }
 
         /* DIALOGS AND STATE TRANSITIONS */
-        let s_ref = &mut self.state;
-        let nstate = match s_ref {
+        let nstate = match &mut self.state {
             AppState::Normal => None,
             AppState::Quit => {
                 if self.is_dirty {
@@ -262,14 +261,14 @@ impl eframe::App for MyEguiApp {
                         DialogState::Cancelled => Some(AppState::Normal),
                         DialogState::Selected(p) => {
                             self.save_file_location = Some(p.clone());
-                            let save_success = self.load_from_file();
-                            match save_success {
+                            let load_success = self.load_from_file();
+                            match load_success {
                                 Ok(()) => {
-                                    println!("Data sucessfully saved!");
+                                    println!("Data sucessfully loaded!");
                                     self.is_dirty = false;
                                 }
                                 Err(err_s) => {
-                                    eprintln!("ERROR: Could not save to file: {err_s}");
+                                    eprintln!("ERROR: Could not load from file: {err_s}");
                                 }
                             }
                             Some(AppState::Normal)
@@ -280,10 +279,10 @@ impl eframe::App for MyEguiApp {
             AppState::Save(dialog, save_type) => {
                 let st = *save_type;
                 if self.save_file_location.is_some() {
-                    let load_success = self.save_to_file();
-                    match load_success {
+                    let save_success = self.save_to_file();
+                    match save_success {
                         Ok(()) => {
-                            println!("File successfully loaded!");
+                            println!("File successfully saved!");
                             self.is_dirty = false;
                             match st {
                                 SaveType::Quit => Some(AppState::Quit),
@@ -292,7 +291,7 @@ impl eframe::App for MyEguiApp {
                             }
                         }
                         Err(err_s) => {
-                            eprintln!("ERROR: Could not load from file: {err_s}");
+                            eprintln!("ERROR: Could not save to file: {err_s}");
                             Some(AppState::Normal)
                         }
                     }
@@ -304,22 +303,6 @@ impl eframe::App for MyEguiApp {
                         DialogState::Selected(p) => {
                             self.save_file_location = Some(p.clone());
                             None
-                            // let load_success = self.save_to_file();
-                            // match load_success {
-                            //     Ok(()) => {
-                            //         println!("File successfully loaded!");
-                            //         self.is_dirty = false;
-                            //         match st {
-                            //             SaveType::Quit => Some(State::Quit),
-                            //             SaveType::Load => Some(State::Load(LoadDialog::new(self))),
-                            //             SaveType::Normal => Some(State::Normal),
-                            //         }
-                            //     },
-                            //     Err(err_s) => {
-                            //         eprintln!("ERROR: Could not load from file: {}", err_s);
-                            //         Some(State::Normal)
-                            //     }
-                            // }
                         }
                     }
                 }
